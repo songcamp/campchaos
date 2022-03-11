@@ -4,12 +4,16 @@ pragma solidity 0.8.10;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
+import {SafeTransferLib} from '@rari-capital/solmate/src/utils/SafeTransferLib.sol';
 import "./EIP712Allowlisting.sol";
+import "./interfaces/ISplitMain.sol";
 
 /// @title Song Packs
 /// @notice
 /// @dev
 contract SongPacks is ERC1155Supply, EIP712Allowlisting, Ownable {
+    using SafeTransferLib for address;
+
     uint256 constant MAX_PER_MINT = 20; /*Don't let people buy more than 20 per transaction*/
     uint256 RESERVED; /*Max token ID for reserve*/
     uint256 PRESALE_LIMIT; /*Max token ID for presale- set in constructor*/
@@ -19,10 +23,18 @@ contract SongPacks is ERC1155Supply, EIP712Allowlisting, Ownable {
 
     uint256 constant PREFIX_OPENPACK = 1e24;
 
+    uint256 constant PERCENTAGE_SCALE = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
+    // TODO (wm): correct SUPERCHARGED_PACK_ID
+    uint256 constant SUPERCHARGED_PACK_ID = 1; /* supercharged pack ID */
+
     using Counters for Counters.Counter;
     string public contractURI; /*contractURI contract metadata json*/
 
     address payable public ethSink; /*recipient for ETH*/
+    address payable public payoutSplit; /* 0xSplits address for split */
+    ISplitMain public splitMain; /* 0xSplits address for updating & distributing split */
+
+    uint32 internal distributorFee; /* 0xSplits distributorFee payable to third parties covering gas of distribution */
 
     // Track when presales and public sales are allowed
     enum ContractState {
@@ -38,7 +50,9 @@ contract SongPacks is ERC1155Supply, EIP712Allowlisting, Ownable {
         uint256 _reserved,
         uint256 _presaleLimit,
         uint256 _publicSaleLimit,
-        address payable _sink
+        address payable _sink,
+        address payable _payoutSplit,
+        uint32 _distributorFee
     ) ERC1155(uri_) EIP712Allowlisting("SongPacks") {
         ethSink = _sink;
         contractURI = _contractURI;
@@ -48,6 +62,9 @@ contract SongPacks is ERC1155Supply, EIP712Allowlisting, Ownable {
         PUBLIC_LIMIT = _publicSaleLimit;
 
         _tokenIds = Counters.Counter({_value: RESERVED}); /*Start token IDs after reserved tokens*/
+
+        payoutSplit = _payoutSplit;
+        distributorFee = _distributorFee;
     }
 
     /*****************
@@ -149,6 +166,46 @@ contract SongPacks is ERC1155Supply, EIP712Allowlisting, Ownable {
     }
 
     /*****************
+    DISTRIBUTION FUNCTIONS
+    *****************/
+
+    /// @notice distributes ETH to supercharged NFT holders
+    /// @param accounts Ordered, unique list of supercharged NFT tokenholders
+    /// @param distributorAddress Address to receive distributorFee
+    function distributeETH(
+        address[] calldata accounts,
+        address distributorAddress
+    ) external {
+        uint256 numRecipients = accounts.length;
+        uint32[] memory percentAllocations = new uint32[](numRecipients);
+        for (uint256 i = 0; i < numRecipients; ) {
+            // TODO (wm): ideally could access balances directly to save gas
+            // for this use case, the require check against the zero address is irrelevant & adds gas
+            percentAllocations[i] =
+                balanceOf(accounts[i], SUPERCHARGED_PACK_ID) *
+                PERCENTAGE_SCALE;
+            unchecked {
+                ++i;
+            }
+        }
+
+        // atomically deposit funds into split, update recipients to reflect current supercharged NFT holders,
+        // and distribute
+        payoutSplit.safeTransferETH(address(this).balance);
+        splitMain.updateAndDistributeETH(
+            payoutSplit,
+            accounts,
+            percentAllocations,
+            distributorFee,
+            // TODO (wm): should distributorAddress have a fallback?
+            // tx.origin or msg.sender if === Address(0)?
+            distributorAddress
+        );
+
+        // TODO (wm): emit event?
+    }
+
+    /*****************
     CONFIG FUNCTIONS
     *****************/
 
@@ -172,6 +229,12 @@ contract SongPacks is ERC1155Supply, EIP712Allowlisting, Ownable {
     /// @param _contractURI Contract metadata json
     function setContractURI(string memory _contractURI) external onlyOwner {
         contractURI = _contractURI;
+    }
+
+    /// @notice Set distributorFee as owner
+    /// @param _distributorFee 0xSplits distributorFee payable to third parties covering gas of distribution
+    function setDistributorFee(uint32 _distributorFee) external onlyOwner {
+        distributorFee = _distributorFee;
     }
 
     /*****************
