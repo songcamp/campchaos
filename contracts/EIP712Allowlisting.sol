@@ -30,7 +30,7 @@ contract EIP712Allowlisting is AccessControl, EIP712Base {
             abi.encodePacked(
                 "\x19\x01",
                 DOMAIN_SEPARATOR,
-                keccak256(abi.encode(MINTER_TYPEHASH, msg.sender, tier, nonce))
+                keccak256(abi.encode(MINTER_TYPEHASH, msg.sender, nonce))
             )
         );
         

@@ -3,6 +3,7 @@ pragma solidity 0.8.10;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "./EIP712Allowlisting.sol";
 
@@ -22,12 +23,15 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
     address public songContract;
 
     using Counters for Counters.Counter;
+    using Strings for uint256;
     Counters.Counter private _reservedTokenIds; /*Tokens 1-> RESERVED*/
     Counters.Counter private _tokenIds; /*Tokens RESERVE + 1 -> PUBLIC_LIMIT*/
 
     string public contractURI; /*contractURI contract metadata json*/
 
     address payable public ethSink; /*recipient for ETH*/
+
+    string public baseURI; /*baseURI_ String to prepend to token IDs*/
 
     // Track when presales and public sales are allowed
     enum ContractState {
@@ -67,7 +71,7 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         bytes calldata _signature
     ) external payable requiresAllowlist(_signature, _nonce) {
         require(contractState[ContractState.Presale], "!round");
-        _purchase(_quantity, PRESALE_LIMIT, PRESALE_PRICE);
+        _purchase(msg.sender,_quantity, PRESALE_LIMIT, PRESALE_PRICE);
     }
 
     /// @notice Mint pack by anyone
@@ -75,7 +79,7 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
     /// @param _quantity How many tokens to buy - up to 20 at a time
     function mintOpensale(uint256 _quantity) external payable {
         require(contractState[ContractState.Public], "!round");
-        _purchase(_quantity, PUBLIC_LIMIT, PUBLIC_PRICE);
+        _purchase(msg.sender, _quantity, PUBLIC_LIMIT, PUBLIC_PRICE);
     }
 
     /// @notice Mint special reserve by owner
@@ -121,7 +125,7 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         require(_success, "could not send");
 
         for (uint256 _index = 0; _index < _quantity; _index++) {
-            _mintItem(msg.sender); /*Mint all tokens to sender*/
+            _mintItem(_to); /*Mint all tokens to sender*/
         }
 
     }
@@ -165,11 +169,6 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         songContract = _songContract;
     }
 
-    /// @notice internal helper to retrieve private base URI for token URI construction
-    function _baseURI() internal view override returns (string memory) {
-        return baseURI;
-    }
-
     /// @notice internal helper to update token URI
     /// @param baseURI_ String to prepend to token IDs
     function _setBaseURI(string memory baseURI_) internal {
@@ -185,8 +184,20 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId), "ERC721Metadata: URI query for nonexistent token");
 
-        string memory baseURI = _baseURI();
         return bytes(baseURI).length > 0 ? string(abi.encodePacked(baseURI, tokenId.toString(), ".json")) : "";
+    }
+
+    ///@dev Support interfaces for Access Control and ERC721
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(AccessControl, ERC721)
+        returns (bool)
+    {
+        return
+            interfaceId == type(IERC721).interfaceId ||
+            interfaceId == type(IAccessControl).interfaceId ||
+            super.supportsInterface(interfaceId);
     }
 
 }
