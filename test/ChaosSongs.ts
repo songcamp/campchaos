@@ -67,7 +67,7 @@ describe("Chaos Packs", function () {
         await accounts[0].sendTransaction({to: nftTokenContract.address, value: ethers.utils.parseEther('10')})
         await nftTokenContract.distributeETH(thousandAddresses, accounts[0].address)
     });
-    it.skip("Should allow liquid splits distributions in semi worst case", async function () {
+    it("Should allow liquid splits distributions in semi worst case", async function () {
         const fivehundredaddresses = thousandAddresses.slice(-500)
         for (let index = 0; index < fivehundredaddresses.length; index++) {
             await nftTokenContract.mintSupercharged(fivehundredaddresses[index], 2)
