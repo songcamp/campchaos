@@ -1,4 +1,4 @@
-pragma solidity 0.8.10;
+pragma solidity 0.8.4;
 
 contract EIP712Base {
     bytes32 public DOMAIN_SEPARATOR;

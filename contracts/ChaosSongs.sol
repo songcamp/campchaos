@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.10;
+pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "./ChaosPacks.sol";
-import "./interfaces/ISplitMain.sol";
+import "./external/interfaces/ISplitMain.sol";
 
 /// @title Chaos Songs
 /// @notice
@@ -42,6 +42,7 @@ contract ChaosSongs is ERC721, Ownable {
         string memory _contractURI,
         uint256 _limit,
         address payable _payoutSplit,
+        address _splitMain,
         uint32 _distributorFee
     ) ERC721("Song Camp Chaos Songs", "SCCS") {
         contractURI = _contractURI;
@@ -50,6 +51,7 @@ contract ChaosSongs is ERC721, Ownable {
         PUBLIC_LIMIT = _limit;
 
         payoutSplit = _payoutSplit;
+        splitMain = ISplitMain(_splitMain);
         distributorFee = _distributorFee;
 
         _tokenIds = Counters.Counter({_value: PERCENTAGE_SCALE}); /*Start token IDs after reserved tokens*/
@@ -66,12 +68,14 @@ contract ChaosSongs is ERC721, Ownable {
     }
 
     // TODO batch mint
-    function mintSupercharged(address _to) external onlyOwner {
+    function mintSupercharged(address _to, uint256 _amount) external onlyOwner {
         require(
-            (_reservedTokenIds.current() + 1) <= PERCENTAGE_SCALE,
+            (_reservedTokenIds.current() + _amount) <= PERCENTAGE_SCALE,
             "EXCEEDS CAP"
         );
-        _mintReserved(_to);
+        for (uint256 index = 0; index < _amount; index++) {
+            _mintReserved(_to);
+        }
     }
 
     /*****************
@@ -112,7 +116,7 @@ contract ChaosSongs is ERC721, Ownable {
     /// @param accounts Ordered, unique list of supercharged NFT tokenholders
     /// @param distributorAddress Address to receive distributorFee
     function distributeETH(
-        address payable[] calldata accounts,
+        address[] calldata accounts,
         address distributorAddress
     ) external {
         uint256 numRecipients = accounts.length;
@@ -120,13 +124,9 @@ contract ChaosSongs is ERC721, Ownable {
         for (uint256 i = 0; i < numRecipients; ) {
             // TODO (wm): ideally could access balances directly to save gas
             // for this use case, the require check against the zero address is irrelevant & adds gas
-            accounts[i].call{
-                value: ((address(this).balance *
-                    superchargeBalances[accounts[i]]) / PERCENTAGE_SCALE)
-            }("");
-            // percentAllocations[i] =
-            //     superchargeBalances[accounts[i]] *
-            //     PERCENTAGE_SCALE;
+            percentAllocations[i] =
+                superchargeBalances[accounts[i]] *
+                PERCENTAGE_SCALE;
             unchecked {
                 ++i;
             }
@@ -134,16 +134,16 @@ contract ChaosSongs is ERC721, Ownable {
 
         // atomically deposit funds into split, update recipients to reflect current supercharged NFT holders,
         // and distribute
-        // payoutSplit.safeTransferETH(address(this).balance);
-        // splitMain.updateAndDistributeETH(
-        //     payoutSplit,
-        //     accounts,
-        //     percentAllocations,
-        //     distributorFee,
-        //     // TODO (wm): should distributorAddress have a fallback?
-        //     // tx.origin or msg.sender if === Address(0)?
-        //     distributorAddress
-        // );
+        payoutSplit.safeTransferETH(address(this).balance);
+        splitMain.updateAndDistributeETH(
+            payoutSplit,
+            accounts,
+            percentAllocations,
+            distributorFee,
+            // TODO (wm): should distributorAddress have a fallback?
+            // tx.origin or msg.sender if === Address(0)?
+            distributorAddress
+        );
 
         // TODO (wm): emit event?
     }
