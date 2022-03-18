@@ -6,6 +6,7 @@ import "@nomiclabs/hardhat-ethers";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-solhint";
 import "@typechain/hardhat";
+import "hardhat-gas-reporter"
 import "dotenv/config";
 import "hardhat-deploy";
 import "solidity-coverage";

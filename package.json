@@ -61,6 +61,7 @@
         "timeout": 10000000
     },
     "dependencies": {
-        "@rari-capital/solmate": "^6.2.0"
+        "@rari-capital/solmate": "^6.2.0",
+        "hardhat-gas-reporter": "^1.0.8"
     }
 }

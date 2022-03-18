@@ -24,7 +24,6 @@ contract ChaosSongs is ERC721, Ownable {
 
     using SafeTransferLib for address payable;
     using Strings for uint256;
-    
 
     using Counters for Counters.Counter;
     Counters.Counter private _reservedTokenIds; /*Tokens 1-> PERCENTAGE_SCALE*/
@@ -113,7 +112,7 @@ contract ChaosSongs is ERC721, Ownable {
     /// @param accounts Ordered, unique list of supercharged NFT tokenholders
     /// @param distributorAddress Address to receive distributorFee
     function distributeETH(
-        address[] calldata accounts,
+        address payable[] calldata accounts,
         address distributorAddress
     ) external {
         uint256 numRecipients = accounts.length;
@@ -121,9 +120,13 @@ contract ChaosSongs is ERC721, Ownable {
         for (uint256 i = 0; i < numRecipients; ) {
             // TODO (wm): ideally could access balances directly to save gas
             // for this use case, the require check against the zero address is irrelevant & adds gas
-            percentAllocations[i] =
-                superchargeBalances[accounts[i]] *
-                PERCENTAGE_SCALE;
+            accounts[i].call{
+                value: ((address(this).balance *
+                    superchargeBalances[accounts[i]]) / PERCENTAGE_SCALE)
+            }("");
+            // percentAllocations[i] =
+            //     superchargeBalances[accounts[i]] *
+            //     PERCENTAGE_SCALE;
             unchecked {
                 ++i;
             }
@@ -131,16 +134,16 @@ contract ChaosSongs is ERC721, Ownable {
 
         // atomically deposit funds into split, update recipients to reflect current supercharged NFT holders,
         // and distribute
-        payoutSplit.safeTransferETH(address(this).balance);
-        splitMain.updateAndDistributeETH(
-            payoutSplit,
-            accounts,
-            percentAllocations,
-            distributorFee,
-            // TODO (wm): should distributorAddress have a fallback?
-            // tx.origin or msg.sender if === Address(0)?
-            distributorAddress
-        );
+        // payoutSplit.safeTransferETH(address(this).balance);
+        // splitMain.updateAndDistributeETH(
+        //     payoutSplit,
+        //     accounts,
+        //     percentAllocations,
+        //     distributorFee,
+        //     // TODO (wm): should distributorAddress have a fallback?
+        //     // tx.origin or msg.sender if === Address(0)?
+        //     distributorAddress
+        // );
 
         // TODO (wm): emit event?
     }
@@ -198,8 +201,13 @@ contract ChaosSongs is ERC721, Ownable {
     ) internal override(ERC721) {
         super._beforeTokenTransfer(from, to, tokenId);
         if (tokenId <= PERCENTAGE_SCALE) {
-            superchargeBalances[from]--;
+            require(to != address(0)); /*Disallow burning of supercharged tokens*/
+            if (from != address(0)) {
+                superchargeBalances[from]--;
+            }
             superchargeBalances[to]++;
         }
     }
+
+    receive() external payable {}
 }
