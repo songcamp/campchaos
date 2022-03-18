@@ -20,7 +20,6 @@ describe("Chaos Packs", function () {
     let accounts: SignerWithAddress[];
     let nftTokenContract: ChaosSongs;
     let splitContract: SplitMain;
-    let splitWallet: string;
 
     beforeEach(async function () {
         accounts = await ethers.getSigners();
@@ -37,13 +36,11 @@ describe("Chaos Packs", function () {
 
 
         splitContract = await splitFactory.deploy()
-        splitWallet = await splitContract.walletImplementation()
 
         nftTokenContract = await nftTokenFactory.deploy(
             config.baseUri,
             config.contractUri,
             config.supercharged,
-            splitWallet,
             splitContract.address,
             config.distributorFee
         );

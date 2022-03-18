@@ -41,7 +41,6 @@ contract ChaosSongs is ERC721, Ownable {
         string memory baseURI_,
         string memory _contractURI,
         uint256 _limit,
-        address payable _payoutSplit,
         address _splitMain,
         uint32 _distributorFee
     ) ERC721("Song Camp Chaos Songs", "SCCS") {
@@ -50,8 +49,24 @@ contract ChaosSongs is ERC721, Ownable {
 
         PUBLIC_LIMIT = _limit;
 
-        payoutSplit = _payoutSplit;
         splitMain = ISplitMain(_splitMain);
+
+        splitMain = ISplitMain(_splitMain);
+
+        // create dummy mutable split with this contract as controller;
+        // recipients & distributorFee will be updated on first payout
+        // might be easier to pass this in as calldata in constructor?
+        address[] memory recipients = new address[](2);
+        recipients[0] = address(0);
+        recipients[1] = address(1);
+        uint32[] memory percentAllocations = new uint32[](2);
+        percentAllocations[0] = uint32(500000);
+        percentAllocations[1] = uint32(500000);
+        payoutSplit = payable(splitMain.createSplit(recipients,percentAllocations,0,address(this)));
+
+        distributorFee = _distributorFee;
+
+        
         distributorFee = _distributorFee;
 
         _tokenIds = Counters.Counter({_value: PERCENTAGE_SCALE}); /*Start token IDs after reserved tokens*/
