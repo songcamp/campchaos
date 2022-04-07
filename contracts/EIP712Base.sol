@@ -2,7 +2,7 @@ pragma solidity 0.8.4;
 
 contract EIP712Base {
     bytes32 public DOMAIN_SEPARATOR;
-
+    
     constructor(string memory name) {
         // This should match whats in the client side whitelist signing code
         // https://github.com/msfeldstein/EIP712-whitelisting/blob/main/test/signWhitelist.ts#L12
