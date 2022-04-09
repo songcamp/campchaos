@@ -31,7 +31,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
 
     mapping(uint256 => uint256) offsets;
 
-    bytes32[] public unclaimed;
+    bytes32[100] public unclaimed;
 
     mapping(uint256 => uint256) public tokenSongs;
     mapping(address => uint32) public superchargeBalances;
@@ -88,11 +88,11 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
 
         _tokenIds = Counters.Counter({_value: PERCENTAGE_SCALE}); /*Start token IDs after reserved tokens*/
 
-        for (uint256 index = 0; index < 100; index++) {
-            unchecked {
-                unclaimed.push(MAX_BYTES32);
-            }
-        }
+        // for (uint256 index = 0; index < 100; index++) {
+        //     unchecked {
+        //         unclaimed.push(MAX_BYTES32);
+        //     }
+        // }
     }
 
     /*****************
@@ -115,11 +115,23 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
             _mintReserved(_to);
         }
     }
+    
+    // function _getDiffOffset(uint256 _seed) internal returns (uint256) {
+    //     uint256 _bitstringIndex = _seed % NUM_BITSTRINGS;
+    //     // console.log("bitstringIndex %s", _bitstringIndex);
+    //     while (unclaimed[_bitstringIndex] == 0) {
+    //         // Check if depleted
+    //         if (_bitstringIndex == NUM_BITSTRINGS - 1)
+    //             _bitstringIndex = 0; // Roll over to index 0
+    //         else _bitstringIndex++; // Check the next highest bitstring
+    //     }
+        
+    // }
 
     function _getNextOffset(uint256 _seed) internal returns (uint256) {
         uint256 _bitstringIndex = _seed % NUM_BITSTRINGS;
         // console.log("bitstringIndex %s", _bitstringIndex);
-        while (unclaimed[_bitstringIndex] == 0) {
+        while (unclaimed[_bitstringIndex] == MAX_BYTES32) {
             // Check if depleted
             if (_bitstringIndex == NUM_BITSTRINGS - 1)
                 _bitstringIndex = 0; // Roll over to index 0
@@ -138,7 +150,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         uint256 _bitstringInternalIndex = _seed % _bitstringMax;
 
         while (
-            getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex) == false
+            getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex) // Check if bit is claimed
         ) {
             // console.log("Checking index, internal %s, %s", _bitstringIndex, _bitstringInternalIndex);
             if (_bitstringInternalIndex == _bitstringMax)
@@ -149,7 +161,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         /* _bitstringInternalIndex now has an unclaimed pick*/
 
         // Mark the bit as claimed
-        unclaimed[_bitstringIndex] = clearBit(
+        unclaimed[_bitstringIndex] = setBit(
             unclaimed[_bitstringIndex],
             _bitstringInternalIndex
         );
