@@ -30,8 +30,10 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     ChaosPacks public packContract;
 
     mapping(uint256 => uint256) offsets;
+    
 
     bytes32[100] public unclaimed;
+    mapping (uint256 => uint256) numTaken;
 
     mapping(uint256 => uint256) public tokenSongs;
     mapping(address => uint32) public superchargeBalances;
@@ -141,33 +143,51 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         /*_bitstringIndex now has a non-depleted selection*/
 
         uint256 _bitstringMax = 49; /*Set parameter for modding the seed*/
-        // if (_bitstringIndex == NUM_BITSTRINGS) {
-        //     _bitstringMax = MAX_BITSTRING_LENGTH;
-        // } else {
-        //     _bitstringMax = 49;
-        // }
 
-        uint256 _bitstringInternalIndex = _seed % _bitstringMax;
+        // console.log("Taken %s, bitstring %s", numTaken[_bitstringIndex], _bitstringIndex);
+        uint256 _bitstringInternalIndex = _seed % (_bitstringMax + 2 - numTaken[_bitstringIndex]);
+        
+        uint256 _internalCounter = 0;
+        
+        uint256 index;
 
-        while (
-            getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex) // Check if bit is claimed
-        ) {
-            // console.log("Checking index, internal %s, %s", _bitstringIndex, _bitstringInternalIndex);
-            if (_bitstringInternalIndex == _bitstringMax)
-                _bitstringInternalIndex = 0; // Roll over to index 0
-            else _bitstringInternalIndex++; // Check the next highest index
+        for (index = 0; index <= _bitstringMax; index++) {
+            if (getBit(unclaimed[_bitstringIndex], index) == false) {
+                _internalCounter++;
+            }
+            if (_internalCounter == (_bitstringInternalIndex + 1)) {
+                // require(getBit(unclaimed[_bitstringIndex], index) == false, "Taken");
+                unclaimed[_bitstringIndex] = setBit(
+                    unclaimed[_bitstringIndex],
+                    index
+                );
+                break;
+            }
         }
+        
+        
+
+        // while (
+        //     getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex) // Check if bit is claimed
+        // ) {
+        //     // console.log("Checking index, internal %s, %s", _bitstringIndex, _bitstringInternalIndex);
+        //     if (_bitstringInternalIndex == _bitstringMax)
+        //         _bitstringInternalIndex = 0; // Roll over to index 0
+        //     else _bitstringInternalIndex++; // Check the next highest index
+        // }
 
         /* _bitstringInternalIndex now has an unclaimed pick*/
 
         // Mark the bit as claimed
-        unclaimed[_bitstringIndex] = setBit(
-            unclaimed[_bitstringIndex],
-            _bitstringInternalIndex
-        );
+        // unclaimed[_bitstringIndex] = setBit(
+        //     unclaimed[_bitstringIndex],
+        //     _bitstringInternalIndex
+        // );
+        
+        numTaken[_bitstringIndex]++;
 
         // Return the total index to use as the pack offset
-        return ((_bitstringIndex * 50) + _bitstringInternalIndex);
+        return ((_bitstringIndex * 50) + index);
     }
 
     /*****************
@@ -181,7 +201,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
 
         uint256 _offset = _getNextOffset(_seed);
         
-        // console.log("offset %s", _offset);
+        console.log("offset %s", _offset);
 
         offsets[_currentIndex] = _offset;
     }
