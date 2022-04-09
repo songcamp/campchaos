@@ -2,7 +2,8 @@ pragma solidity 0.8.4;
 
 contract BitwiseUtils {
 
-    bytes32 constant MAX_BYTES32 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    // bytes32 constant MAX_BYTES32 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    bytes32 constant MAX_BYTES32 = bytes32(uint256(0x3FFFFFFFFFFFF));
     bytes32 constant ONE = bytes32(uint256(1));
     
     function and(bytes32 a, bytes32 b) internal returns (bytes32) {

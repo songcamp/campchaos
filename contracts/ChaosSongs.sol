@@ -24,8 +24,8 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     //     0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
     // uint256 constant BITS_136 = 0xffffffffffffffffffffffffffffffffff;
 
-    uint256 constant NUM_BITSTRINGS = 20; // 5000 / 256 + 1
-    uint256 constant MAX_BITSTRING_LENGTH = 136; // 5000 % 256 remainder
+    uint256 constant NUM_BITSTRINGS = 100; // 5000 / 256 + 1
+    // uint256 constant MAX_BITSTRING_LENGTH = 136; // 5000 % 256 remainder
 
     ChaosPacks public packContract;
 
@@ -88,7 +88,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
 
         _tokenIds = Counters.Counter({_value: PERCENTAGE_SCALE}); /*Start token IDs after reserved tokens*/
 
-        for (uint256 index = 0; index < 20; index++) {
+        for (uint256 index = 0; index < 100; index++) {
             unchecked {
                 unclaimed.push(MAX_BYTES32);
             }
@@ -115,38 +115,47 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
             _mintReserved(_to);
         }
     }
-    
-    function _getNextOffset(uint256 _seed) internal returns (uint256){
+
+    function _getNextOffset(uint256 _seed) internal returns (uint256) {
         uint256 _bitstringIndex = _seed % NUM_BITSTRINGS;
-        while (unclaimed[_bitstringIndex] == 0) { // Check if depleted
-            if (_bitstringIndex == NUM_BITSTRINGS) _bitstringIndex = 0; // Roll over to index 0
+        // console.log("bitstringIndex %s", _bitstringIndex);
+        while (unclaimed[_bitstringIndex] == 0) {
+            // Check if depleted
+            if (_bitstringIndex == NUM_BITSTRINGS - 1)
+                _bitstringIndex = 0; // Roll over to index 0
             else _bitstringIndex++; // Check the next highest bitstring
         }
-        
+
         /*_bitstringIndex now has a non-depleted selection*/
 
-        uint256 _bitstringMax; /*Set parameter for modding the seed*/
-        if (_bitstringIndex == NUM_BITSTRINGS) {
-            _bitstringMax = MAX_BITSTRING_LENGTH;
-        } else {
-            _bitstringMax = 255;
-        }
-        
+        uint256 _bitstringMax = 49; /*Set parameter for modding the seed*/
+        // if (_bitstringIndex == NUM_BITSTRINGS) {
+        //     _bitstringMax = MAX_BITSTRING_LENGTH;
+        // } else {
+        //     _bitstringMax = 49;
+        // }
+
         uint256 _bitstringInternalIndex = _seed % _bitstringMax;
-        
-        while(getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex) == false) {
-        // console.log("Bit %s", getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex));
-            if (_bitstringInternalIndex == _bitstringMax) _bitstringInternalIndex = 0; // Roll over to index 0
+
+        while (
+            getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex) == false
+        ) {
+            // console.log("Checking index, internal %s, %s", _bitstringIndex, _bitstringInternalIndex);
+            if (_bitstringInternalIndex == _bitstringMax)
+                _bitstringInternalIndex = 0; // Roll over to index 0
             else _bitstringInternalIndex++; // Check the next highest index
-        } 
-        
+        }
+
         /* _bitstringInternalIndex now has an unclaimed pick*/
-        
+
         // Mark the bit as claimed
-        unclaimed[_bitstringIndex] = clearBit(unclaimed[_bitstringIndex], _bitstringInternalIndex);
-        
+        unclaimed[_bitstringIndex] = clearBit(
+            unclaimed[_bitstringIndex],
+            _bitstringInternalIndex
+        );
+
         // Return the total index to use as the pack offset
-        return ((_bitstringIndex * 256) + _bitstringInternalIndex);
+        return ((_bitstringIndex * 50) + _bitstringInternalIndex);
     }
 
     /*****************
@@ -157,19 +166,24 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
 
         // Find unused offset
         uint256 _seed = uint256(blockhash(block.number - 1));
-        
+
         uint256 _offset = _getNextOffset(_seed);
         
+        // console.log("offset %s", _offset);
+
         offsets[_currentIndex] = _offset;
     }
-    
-    function getShuffledTokenId(uint256 _tokenId) public {
+
+    function getShuffledTokenId(uint256 _tokenId)
+        public
+        view
+        returns (uint256)
+    {
         require(_exists(_tokenId));
         uint256 _floor = _tokenId - (_tokenId % 4);
         uint256 _offset = offsets[_floor];
         return ((_offset * 4) + _tokenId);
     }
-
 
     /// @notice Mint tokens from reserve
     /// @dev Token IDs come from separate pool at beginning of counter
@@ -263,7 +277,9 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
 
         return
             bytes(baseURI).length > 0
-                ? string(abi.encodePacked(baseURI, _shuffled.toString(), ".json"))
+                ? string(
+                    abi.encodePacked(baseURI, _shuffled.toString(), ".json")
+                )
                 : "";
     }
 
