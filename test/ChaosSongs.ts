@@ -23,7 +23,7 @@ const config = {
 
 let thousandAddresses = addresses;
 
-describe.only("Chaos Songs", function () {
+describe("Chaos Songs", function () {
     let accounts: SignerWithAddress[];
     let nftTokenContract: ChaosSongs;
     let splitContract: SplitMain;
@@ -68,7 +68,7 @@ describe.only("Chaos Songs", function () {
         await nftTokenContract.setSuperchargedOffset();
     });
 
-    it.only("Should offset the token IDs", async function () {
+    it("Should offset the token IDs", async function () {
         for (let index = 0; index < 5000; index++) {
             const tx = await nftTokenContract.openPack(1);
             const receipt = await tx.wait();

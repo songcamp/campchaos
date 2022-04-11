@@ -190,9 +190,6 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
             }
         }
 
-        // TODO technically could skip  on the last one
-        // TODO is it cheaper to count 1s?
-
         numTaken[_bitstringIndex]++; /*Increment the number we have taken so we mod by 1 less next time*/
 
         // Return the total index to use as the pack offset
@@ -290,6 +287,9 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     /*****************
     CONFIG FUNCTIONS
     *****************/
+    function _startTokenId() internal view override returns (uint256) {
+        return 1;
+    }
 
     // TODO lock song contract address?
     function setPackContract(address _packContract) external onlyOwner {

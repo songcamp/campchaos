@@ -2,30 +2,26 @@
 pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "./EIP712Allowlisting.sol";
+import "./external/erc721a/ERC721A.sol";
 
 // TODO erc721a
 
 /// @title Chaos Packs
 /// @notice
 /// @dev
-contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
+contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
     uint256 constant MAX_PER_MINT = 20; /*Don't let people buy more than 20 per transaction*/
     uint256 RESERVED; /*Max token ID for reserve*/
     uint256 PRESALE_LIMIT; /*Max token ID for presale- set in constructor*/
     uint256 PUBLIC_LIMIT; /*Max token ID - set in constructor*/
     uint256 constant PRESALE_PRICE = 0.05 ether; /*Discount for qualified addresses*/
     uint256 constant PUBLIC_PRICE = 0.1 ether; /*Public sale price*/
-    
+
     address public songContract;
 
-    using Counters for Counters.Counter;
     using Strings for uint256;
-    Counters.Counter private _reservedTokenIds; /*Tokens 1-> RESERVED*/
-    Counters.Counter private _tokenIds; /*Tokens RESERVE + 1 -> PUBLIC_LIMIT*/
 
     string public contractURI; /*contractURI contract metadata json*/
 
@@ -47,7 +43,7 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         uint256 _presaleLimit,
         uint256 _publicSaleLimit,
         address payable _sink
-    ) ERC721("Song Camp Chaos Packs","SCCP") EIP712Allowlisting("SongPacks") {
+    ) ERC721A("Song Camp Chaos Packs", "SCCP") EIP712Allowlisting("SongPacks") {
         ethSink = _sink;
         contractURI = _contractURI;
         _setBaseURI(baseURI_);
@@ -56,7 +52,6 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         PRESALE_LIMIT = _presaleLimit;
         PUBLIC_LIMIT = _publicSaleLimit;
 
-        _tokenIds = Counters.Counter({_value: RESERVED}); /*Start token IDs after reserved tokens*/
     }
 
     /*****************
@@ -71,7 +66,7 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         bytes calldata _signature
     ) external payable requiresAllowlist(_signature, _nonce) {
         require(contractState[ContractState.Presale], "!round");
-        _purchase(msg.sender,_quantity, PRESALE_LIMIT, PRESALE_PRICE);
+        _purchase(msg.sender, _quantity, PRESALE_LIMIT, PRESALE_PRICE);
     }
 
     /// @notice Mint pack by anyone
@@ -85,15 +80,10 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
     /// @notice Mint special reserve by owner
     /// @param _quantity How many tokens to mint
     function mintReserve(uint256 _quantity, address _to) external onlyOwner {
-        require(
-            (_reservedTokenIds.current() + _quantity) <= RESERVED,
-            "EXCEEDS CAP"
-        );
-        for (uint256 index = 0; index < _quantity; index++) {
-            _mintReserved(_to);
-        }
+        require((totalSupply() + _quantity) <= RESERVED, "EXCEEDS CAP");
+        _safeMint(_to, _quantity);
     }
-    
+
     function burnPack(uint256 _packId) external {
         require(msg.sender == songContract);
         _burn(_packId);
@@ -117,37 +107,14 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         uint256 _limit,
         uint256 _price
     ) internal {
-        require((_tokenIds.current() + _quantity) <= _limit, "EXCEEDS CAP"); /*Check max new token ID compared to total cap*/
+        require((totalSupply() + _quantity) <= _limit, "EXCEEDS CAP"); /*Check max new token ID compared to total cap*/
         require(_quantity <= MAX_PER_MINT, "TOO MUCH"); /*Check requested qty vs max*/
         require(msg.value >= _price * _quantity, "NOT ENOUGH"); /*Check if enough ETH sent*/
 
         (bool _success, ) = ethSink.call{value: msg.value}(""); /*Send ETH to sink first*/
         require(_success, "could not send");
 
-        for (uint256 _index = 0; _index < _quantity; _index++) {
-            _mintItem(_to); /*Mint all tokens to sender*/
-        }
-
-    }
-
-    /// @notice Mint tokens from presale and public pool
-    /// @dev Token IDs come from separate pool after reserve
-    /// @param _to Recipient of reserved tokens
-    function _mintItem(address _to) internal {
-        _tokenIds.increment();
-
-        uint256 _id = _tokenIds.current();
-        _safeMint(_to, _id);
-    }
-
-    /// @notice Mint tokens from reserve
-    /// @dev Token IDs come from separate pool at beginning of counter
-    /// @param _to Recipient of reserved tokens
-    function _mintReserved(address _to) internal {
-        _reservedTokenIds.increment();
-
-        uint256 _id = _reservedTokenIds.current();
-        _safeMint(_to, _id);
+        _safeMint(_to, _quantity);
     }
 
     /*****************
@@ -163,7 +130,7 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
     {
         contractState[_state] = _enabled;
     }
-    
+
     // TODO lock song contract address?
     function setSongContract(address _songContract) external onlyOwner {
         songContract = _songContract;
@@ -181,22 +148,37 @@ contract ChaosPacks is ERC721, EIP712Allowlisting, Ownable {
         contractURI = _contractURI;
     }
 
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        require(_exists(tokenId), "ERC721Metadata: URI query for nonexistent token");
-
-        return bytes(baseURI).length > 0 ? string(abi.encodePacked(baseURI, tokenId.toString(), ".json")) : "";
+    function _startTokenId() internal view override returns (uint256) {
+        return 1;
     }
 
-    ///@dev Support interfaces for Access Control and ERC721
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
+        require(
+            _exists(tokenId),
+            "ERC721Metadata: URI query for nonexistent token"
+        );
+
+        return
+            bytes(baseURI).length > 0
+                ? string(abi.encodePacked(baseURI, tokenId.toString(), ".json"))
+                : "";
+    }
+    
+    ///@dev Support interfaces for Access Control 
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(AccessControl, ERC721)
+        override(AccessControl, ERC721A)
         returns (bool)
     {
         return
-            interfaceId == type(IERC721).interfaceId ||
             interfaceId == type(IAccessControl).interfaceId ||
+            interfaceId == type(IERC721).interfaceId ||
             super.supportsInterface(interfaceId);
     }
 
