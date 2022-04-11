@@ -139,6 +139,8 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
                 _bitstringIndex = 0; // Roll over to index 0
             else _bitstringIndex++; // Check the next highest bitstring
         }
+        
+        bytes32 _bitstring = unclaimed[_bitstringIndex];
 
         /*_bitstringIndex now has a non-depleted selection*/
 
@@ -150,15 +152,17 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         uint256 _internalCounter = 0;
         
         uint256 index;
+        
+        
 
         for (index = 0; index <= _bitstringMax; index++) {
-            if (getBit(unclaimed[_bitstringIndex], index) == false) {
+            if (getBit(_bitstring, index) == false) {
                 _internalCounter++;
             }
             if (_internalCounter == (_bitstringInternalIndex + 1)) {
                 // require(getBit(unclaimed[_bitstringIndex], index) == false, "Taken");
                 unclaimed[_bitstringIndex] = setBit(
-                    unclaimed[_bitstringIndex],
+                    _bitstring,
                     index
                 );
                 break;
@@ -201,7 +205,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
 
         uint256 _offset = _getNextOffset(_seed);
         
-        console.log("offset %s", _offset);
+        // console.log("offset %s", _offset);
 
         offsets[_currentIndex] = _offset;
     }

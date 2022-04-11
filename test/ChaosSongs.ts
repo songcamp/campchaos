@@ -65,9 +65,9 @@ describe.only("Chaos Songs", function () {
     it.only("Should offset the token IDs", async function () {
         for (let index = 0; index < 5000; index++) {
             const tx = await nftTokenContract.openPack(1);
-            // const receipt = await tx.wait();
-            // const gasUsed = receipt.gasUsed;
-            // console.log({ index, gasUsed });
+            const receipt = await tx.wait();
+            const gasUsed = receipt.gasUsed;
+            console.log({ index, gasUsed });
         }
         expect(await nftTokenContract.balanceOf(accounts[0].address)).to.equal(
             20000
