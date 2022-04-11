@@ -2,7 +2,6 @@
 pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "./ChaosPacks.sol";
@@ -12,59 +11,67 @@ import "./bits.sol";
 
 import "hardhat/console.sol";
 
+error MaxSupplyExceeded();
+error CallerIsNotTokenOwner();
+error PacksDisabledUntilSuperchargedComplete();
+error SuperchargedOffsetAlreadySet();
+error SuperchargeConfigurationNotReady();
+error SuperchagedOffsetNotSet();
+
 /// @title Chaos Songs
 /// @notice
 /// @dev
 contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
-    uint256 constant SONG_COUNT = 4;
-    uint32 constant PERCENTAGE_SCALE = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
-    uint256 constant MAX_SUPPLY = 21e3;
+    uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
+    uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
+    uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
 
-    // uint256 constant MAX_INT =
-    //     0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-    // uint256 constant BITS_136 = 0xffffffffffffffffffffffffffffffffff;
-
-    uint256 constant NUM_BITSTRINGS = 100; // 5000 / 256 + 1
-    // uint256 constant MAX_BITSTRING_LENGTH = 136; // 5000 % 256 remainder
-
-    ChaosPacks public packContract;
+    /* 
+    Random offset configuration
+    100 * 50 = 5000 packs
+    */
+    uint256 constant NUM_BITSTRINGS = 100; /*100 bitstrings to keep track of claimed offsets*/
+    uint256 constant BITSTRING_LENGTH = 50; /* */
 
     mapping(uint256 => uint256) offsets;
-    
 
     bytes32[100] public unclaimed;
-    mapping (uint256 => uint256) numTaken;
+    mapping(uint256 => uint256) numTaken;
 
-    mapping(uint256 => uint256) public tokenSongs;
-    mapping(address => uint32) public superchargeBalances;
+    bool public superchargedOffsetIsSet; /*Track if supercharged offset is set to disallow pack opening and cause token ID issues*/
+    uint256 public superchargedOffset; /*Track offset for first 1000 NFTs separately*/
 
+    ChaosPacks public packContract; /*External contract to use for pack NFTs*/
+
+    /*Liquid splits config*/
     using SafeTransferLib for address payable;
-    using Strings for uint256;
-
-    using Counters for Counters.Counter;
-    Counters.Counter private _reservedTokenIds; /*Tokens 1-> PERCENTAGE_SCALE*/
-    Counters.Counter private _tokenIds; /*Tokens RESERVE + 1 -> PUBLIC_LIMIT*/
-
+    mapping(address => uint32) public superchargeBalances; /*Track supercharged balance separately for liquid splits*/
     address payable public payoutSplit; /* 0xSplits address for split */
     ISplitMain public splitMain; /* 0xSplits address for updating & distributing split */
     uint32 internal distributorFee; /* 0xSplits distributorFee payable to third parties covering gas of distribution */
 
+    /*Contract config*/
+    using Strings for uint256;
     string public contractURI; /*contractURI contract metadata json*/
-
     string public baseURI; /*baseURI_ String to prepend to token IDs*/
 
+    // TODO ERC2981 for royalties
+
+    /// @notice Constructor sets contract metadata configurations and split interfaces
+    /// @param baseURI_ Base URI for token metadata
+    /// @param _contractURI URI for marketplace contract metadata
+    /// @param _splitMain Address of splits contract for sending royalties
+    /// @param _distributorFee Optional fee to compensate address calling distribute, offset gas
     constructor(
         string memory baseURI_,
         string memory _contractURI,
         address _splitMain,
         uint32 _distributorFee
     ) ERC721A("Song Camp Chaos Songs", "SCCS") {
-        contractURI = _contractURI;
-        _setBaseURI(baseURI_);
+        _setBaseURI(baseURI_); /*Set token level metadata*/
+        contractURI = _contractURI; /*Set marketplace metadata*/
 
-        splitMain = ISplitMain(_splitMain);
-
-        splitMain = ISplitMain(_splitMain);
+        splitMain = ISplitMain(_splitMain); /*Establish interface to splits contract*/
 
         // create dummy mutable split with this contract as controller;
         // recipients & distributorFee will be updated on first payout
@@ -84,114 +91,146 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
             )
         );
 
-        distributorFee = _distributorFee;
-
-        distributorFee = _distributorFee;
-
-        _tokenIds = Counters.Counter({_value: PERCENTAGE_SCALE}); /*Start token IDs after reserved tokens*/
-
-        // for (uint256 index = 0; index < 100; index++) {
-        //     unchecked {
-        //         unclaimed.push(MAX_BYTES32);
-        //     }
-        // }
+        distributorFee = _distributorFee; /*Set optional fee for calling distribute*/
     }
 
     /*****************
     EXTERNAL MINTING FUNCTIONS
     *****************/
 
+    /// @dev Burn a pack and receive 4 song NFTs in exchange
+    /// @param _packId Pack owned by sender
     function openPack(uint256 _packId) external {
-        require(packContract.ownerOf(_packId) == msg.sender, "!owner");
-        packContract.burnPack(_packId);
-        _mintSongs(msg.sender);
+        if (packContract.ownerOf(_packId) != msg.sender)
+            /*Only pack owner can open pack*/
+            revert CallerIsNotTokenOwner();
+
+        if (!superchargedOffsetIsSet)
+            /*Pack opening disabled until supercharged tokensa are configured*/
+            revert PacksDisabledUntilSuperchargedComplete();
+
+        packContract.burnPack(_packId); /*Opening a pack burns the pack NT*/
+        _mintSongs(msg.sender); /*Mint 4 songs to opener*/
     }
 
-    // TODO batch mint
+    /*****************
+    Permissioned Minting
+    *****************/
+    /// @dev Mint the supercharged tokens to proper destination
+    /// @param _to Recipient
+    /// @param _amount Number of tokens to send
+    // TODO distribute via a different contract?
     function mintSupercharged(address _to, uint256 _amount) external onlyOwner {
-        require(
-            (_reservedTokenIds.current() + _amount) <= PERCENTAGE_SCALE,
-            "EXCEEDS CAP"
-        );
-        for (uint256 index = 0; index < _amount; index++) {
-            _mintReserved(_to);
-        }
+        if ((totalSupply() + _amount > SUPERCHARGED_SUPPLY))
+            revert MaxSupplyExceeded(); /*Revert if max supply exceeded*/
+        _safeMint(_to, _amount); /*Batch mint*/
     }
-    
-    // function _getDiffOffset(uint256 _seed) internal returns (uint256) {
-    //     uint256 _bitstringIndex = _seed % NUM_BITSTRINGS;
-    //     // console.log("bitstringIndex %s", _bitstringIndex);
-    //     while (unclaimed[_bitstringIndex] == 0) {
-    //         // Check if depleted
-    //         if (_bitstringIndex == NUM_BITSTRINGS - 1)
-    //             _bitstringIndex = 0; // Roll over to index 0
-    //         else _bitstringIndex++; // Check the next highest bitstring
-    //     }
-        
-    // }
 
+    /*****************
+    RNG Config
+    *****************/
+    /// @dev Should be done AFTER distribution, BEFORE pack opening
+    function setSuperchargedOffset() external onlyOwner {
+        if (superchargedOffsetIsSet) revert SuperchargedOffsetAlreadySet(); /*Can only be set once*/
+        if (totalSupply() != SUPERCHARGED_SUPPLY)
+            /*Must be done after supercharge minting is complete before pack opening*/
+            revert SuperchargeConfigurationNotReady();
+
+        uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
+
+        superchargedOffset = _seed % SUPERCHARGED_SUPPLY; /*Mod seed by supply to get offset*/
+
+        superchargedOffsetIsSet = true; /*Set offset so pack opening can begin and disable this function*/
+    }
+
+    /*****************
+    Internal RNG functions
+    *****************/
+
+    /// @notice Get an unused offset
+    /// @dev Use seed to find a bitstring with available offset indices
+    ///      Use the same seed to get the position within that bitstring
+    /// @param _seed Pseudo-random or random number to use
     function _getNextOffset(uint256 _seed) internal returns (uint256) {
-        uint256 _bitstringIndex = _seed % NUM_BITSTRINGS;
-        // console.log("bitstringIndex %s", _bitstringIndex);
+        uint256 _bitstringIndex = _seed % NUM_BITSTRINGS; /*Get initial bitstring to check*/
+        /* Check if depleted */
         while (unclaimed[_bitstringIndex] == MAX_BYTES32) {
-            // Check if depleted
             if (_bitstringIndex == NUM_BITSTRINGS - 1)
-                _bitstringIndex = 0; // Roll over to index 0
-            else _bitstringIndex++; // Check the next highest bitstring
+                /* Roll over to index 0 */
+                _bitstringIndex = 0;
+            else _bitstringIndex++; /* Check the next highest bitstring */
         }
-        
-        bytes32 _bitstring = unclaimed[_bitstringIndex];
 
         /*_bitstringIndex now has a non-depleted selection*/
+        bytes32 _bitstring = unclaimed[_bitstringIndex];
 
-        uint256 _bitstringMax = 49; /*Set parameter for modding the seed*/
+        uint256 _bitstringMax = BITSTRING_LENGTH - 1; /*Set parameter for modding the seed*/
 
-        // console.log("Taken %s, bitstring %s", numTaken[_bitstringIndex], _bitstringIndex);
-        uint256 _bitstringInternalIndex = _seed % (_bitstringMax + 2 - numTaken[_bitstringIndex]);
-        
-        uint256 _internalCounter = 0;
-        
-        uint256 index;
-        
-        
+        /*Get the index within untaken slots*/
+        uint256 _bitstringInternalIndex = _seed %
+            (_bitstringMax + 2 - numTaken[_bitstringIndex]);
 
-        for (index = 0; index <= _bitstringMax; index++) {
-            if (getBit(_bitstring, index) == false) {
+        uint256 _internalCounter = 0; /*Initialize a counter to check when we reach the untaken slot*/
+
+        uint256 _index; /*Initialize the index for the search*/
+
+        /*Search the bitstring for the nth unclaimed spot*/
+        for (_index = 0; _index <= _bitstringMax; _index++) {
+            /*Only increment if this is an untaken spot*/
+            if (getBit(_bitstring, _index) == false) {
                 _internalCounter++;
             }
+
+            /*Check if we have reached our target*/
             if (_internalCounter == (_bitstringInternalIndex + 1)) {
+                // TODO check for collision?
                 // require(getBit(unclaimed[_bitstringIndex], index) == false, "Taken");
-                unclaimed[_bitstringIndex] = setBit(
-                    _bitstring,
-                    index
-                );
+                unclaimed[_bitstringIndex] = setBit(_bitstring, _index); /*Mark index as taken*/
                 break;
             }
         }
-        
-        
 
-        // while (
-        //     getBit(unclaimed[_bitstringIndex], _bitstringInternalIndex) // Check if bit is claimed
-        // ) {
-        //     // console.log("Checking index, internal %s, %s", _bitstringIndex, _bitstringInternalIndex);
-        //     if (_bitstringInternalIndex == _bitstringMax)
-        //         _bitstringInternalIndex = 0; // Roll over to index 0
-        //     else _bitstringInternalIndex++; // Check the next highest index
-        // }
+        // TODO technically could skip  on the last one
+        // TODO is it cheaper to count 1s?
 
-        /* _bitstringInternalIndex now has an unclaimed pick*/
-
-        // Mark the bit as claimed
-        // unclaimed[_bitstringIndex] = setBit(
-        //     unclaimed[_bitstringIndex],
-        //     _bitstringInternalIndex
-        // );
-        
-        numTaken[_bitstringIndex]++;
+        numTaken[_bitstringIndex]++; /*Increment the number we have taken so we mod by 1 less next time*/
 
         // Return the total index to use as the pack offset
-        return ((_bitstringIndex * 50) + index);
+        return ((_bitstringIndex * BITSTRING_LENGTH) + _index);
+    }
+
+    /// @dev Get the token ID to use for URI of a token ID
+    /// @param _tokenId Token to check
+    function getShuffledTokenId(uint256 _tokenId)
+        public
+        view
+        returns (uint256)
+    {
+        if (!_exists(_tokenId)) revert URIQueryForNonexistentToken(); /*Only return for minted tokens*/
+        uint256 _shuffledTokenId; /*Initialize shuffled token ID*/
+
+        /*If not supercharged use individual offsets*/
+        if (_tokenId > SUPERCHARGED_SUPPLY) {
+            uint256 _floor = _tokenId - (_tokenId % SONG_COUNT); /*Offsets are stored for batches of 4 consecutive songs*/
+            uint256 _offset = offsets[_floor] * SONG_COUNT; /*Multiply by song count to get offset*/
+            _shuffledTokenId = _offset + _tokenId; /*Add to token ID to get shuffled I?D*/
+
+            /*Check if exceeds max supply*/
+            if (_shuffledTokenId > MAX_SUPPLY) {
+                _shuffledTokenId -= (MAX_SUPPLY + SUPERCHARGED_SUPPLY); /*Roll over to beginning of non-supercharged NFTs*/
+            }
+        } else {
+            /*If supercharged use the supercharged offset*/
+            if (!superchargedOffsetIsSet) revert SuperchagedOffsetNotSet(); /*Require that offset is set for this to return*/
+            _shuffledTokenId = superchargedOffset + _tokenId; /*Supercharged offset is same for all tokens*/
+
+            /*Check if exceeds max supply*/
+            if (_shuffledTokenId > SUPERCHARGED_SUPPLY) {
+                _shuffledTokenId -= SUPERCHARGED_SUPPLY; /*Roll over to beginning*/
+            }
+        }
+
+        return _shuffledTokenId;
     }
 
     /*****************
@@ -204,32 +243,8 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         uint256 _seed = uint256(blockhash(block.number - 1));
 
         uint256 _offset = _getNextOffset(_seed);
-        
-        // console.log("offset %s", _offset);
 
         offsets[_currentIndex] = _offset;
-    }
-
-    function getShuffledTokenId(uint256 _tokenId)
-        public
-        view
-        returns (uint256)
-    {
-        require(_exists(_tokenId));
-        uint256 _floor = _tokenId - (_tokenId % 4);
-        uint256 _offset = offsets[_floor];
-        return ((_offset * 4) + _tokenId);
-    }
-
-    /// @notice Mint tokens from reserve
-    /// @dev Token IDs come from separate pool at beginning of counter
-    /// @param _to Recipient of reserved tokens
-    function _mintReserved(address _to) internal {
-        // TODO fix now with ERC721A
-        // _reservedTokenIds.increment();
-
-        // uint256 _id = _reservedTokenIds.current();
-        _safeMint(_to, 1);
     }
 
     /*****************
@@ -250,7 +265,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
             // for this use case, the require check against the zero address is irrelevant & adds gas
             percentAllocations[i] =
                 superchargeBalances[accounts[i]] *
-                PERCENTAGE_SCALE;
+                SUPERCHARGED_SUPPLY;
             unchecked {
                 ++i;
             }
@@ -326,7 +341,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         uint256 quantity
     ) internal override(ERC721A) {
         super._beforeTokenTransfers(from, to, startTokenId, quantity);
-        if (startTokenId <= PERCENTAGE_SCALE) {
+        if (startTokenId <= SUPERCHARGED_SUPPLY) {
             require(to != address(0)); /*Disallow burning of supercharged tokens*/
             if (from != address(0)) {
                 superchargeBalances[from]--;

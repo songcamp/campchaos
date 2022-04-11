@@ -16,7 +16,7 @@ import {
 const config = {
     baseUri: "https://placeholder.com/{}.json",
     contractUri: "https://placeholder.com/contract.json",
-    supercharged: 10,
+    supercharged: 1000,
     distributorFee: 0,
     recipient: "0xd1ed25240ecfa47fD2d46D34584c91935c89546c",
 };
@@ -60,6 +60,12 @@ describe.only("Chaos Songs", function () {
         await nftTokenContract.setPackContract(packContract.address);
 
         console.log(await nftTokenContract.unclaimed(0));
+
+        await nftTokenContract.mintSupercharged(
+            accounts[0].address,
+            config.supercharged
+        );
+        await nftTokenContract.setSuperchargedOffset();
     });
 
     it.only("Should offset the token IDs", async function () {
