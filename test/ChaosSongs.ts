@@ -67,8 +67,42 @@ describe("Chaos Songs", function () {
         );
         await nftTokenContract.setSuperchargedOffset();
     });
+    
+    // Pack opening - Avoids collisions
+    
+    // Pack opening - assigns offset to group of 4 songs
+    
+    // Constructor - sets up splits
+    
+    // Pack opening - fails if burn fails
+    
+    // Token URI - correctly assigns shuffled token ID for normal NFT
 
-    it("Should offset the token IDs", async function () {
+    // Token URI - correctly assigns shuffled token ID for supercharged NFT
+    
+    // Supercharged - tracks balance of supercharged
+    
+    // Supercharged - allows minting up to limit by owner
+    
+    // Supercharged - does not allow otehrs to mint
+    
+    // Supercharged offests - allows to set once
+    
+    // Distribute ETH - sends ETH to splits contract
+    
+    // Token IDS - starts at 1
+    
+    // Access control - set pack contract
+    
+    // Access control - URIs
+    
+    // Access control - fees
+    
+    
+    
+    //
+
+    it.only("Should offset the token IDs", async function () {
         for (let index = 0; index < 5000; index++) {
             const tx = await nftTokenContract.openPack(1);
             const receipt = await tx.wait();

@@ -26,6 +26,11 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
     uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
 
+
+    /// Available IDS list
+    uint16[] private availableIds;
+    /// Entropy base
+    bytes32 entropyBase;
     /* 
     Random offset configuration
     100 * 50 = 5000 packs
@@ -90,8 +95,13 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
                 address(this)
             )
         );
-
         distributorFee = _distributorFee; /*Set optional fee for calling distribute*/
+        
+        // Create array of avilable ids (not initialized as a gas optimization)
+        availableIds = new uint16[](5000);
+
+        // Init entropy
+        _updateEntropy();
     }
 
     /*****************
@@ -146,54 +156,46 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     /*****************
     Internal RNG functions
     *****************/
-
-    /// @notice Get an unused offset
-    /// @dev Use seed to find a bitstring with available offset indices
-    ///      Use the same seed to get the position within that bitstring
-    /// @param _seed Pseudo-random or random number to use
-    function _getNextOffset(uint256 _seed) internal returns (uint256) {
-        uint256 _bitstringIndex = _seed % NUM_BITSTRINGS; /*Get initial bitstring to check*/
-        /* Check if depleted */
-        while (unclaimed[_bitstringIndex] == MAX_BYTES32) {
-            if (_bitstringIndex == NUM_BITSTRINGS - 1)
-                /* Roll over to index 0 */
-                _bitstringIndex = 0;
-            else _bitstringIndex++; /* Check the next highest bitstring */
+    
+    /// @dev Updates entropy value hash
+    function _updateEntropy() internal {
+        entropyBase = keccak256(
+            abi.encodePacked(
+                msg.sender,
+                block.timestamp,
+                block.coinbase,
+                block.difficulty,
+                gasleft(),
+                tx.gasprice,
+                baseURI
+            )
+        );
+    }
+    
+    function _getNextOffset() internal returns (uint256){
+        require(availableIds.length > 0, "Sold out");
+        // This updates the entropy base for minting. Fairly simple but should work for this use case.
+        _updateEntropy();
+        // Get index of ID to mint from available ids
+        uint256 swapIndex = uint256(entropyBase) % availableIds.length;
+        // Load in new id
+        uint256 newId = availableIds[swapIndex];
+        // If unset, assume equals index
+        if (newId == 0) {
+            newId = swapIndex;
         }
-
-        /*_bitstringIndex now has a non-depleted selection*/
-        bytes32 _bitstring = unclaimed[_bitstringIndex];
-
-        uint256 _bitstringMax = BITSTRING_LENGTH - 1; /*Set parameter for modding the seed*/
-
-        /*Get the index within untaken slots*/
-        uint256 _bitstringInternalIndex = _seed %
-            (_bitstringMax + 2 - numTaken[_bitstringIndex]);
-
-        uint256 _internalCounter = 0; /*Initialize a counter to check when we reach the untaken slot*/
-
-        uint256 _index; /*Initialize the index for the search*/
-
-        /*Search the bitstring for the nth unclaimed spot*/
-        for (_index = 0; _index <= _bitstringMax; _index++) {
-            /*Only increment if this is an untaken spot*/
-            if (getBit(_bitstring, _index) == false) {
-                _internalCounter++;
-            }
-
-            /*Check if we have reached our target*/
-            if (_internalCounter == (_bitstringInternalIndex + 1)) {
-                // TODO check for collision?
-                // require(getBit(unclaimed[_bitstringIndex], index) == false, "Taken");
-                unclaimed[_bitstringIndex] = setBit(_bitstring, _index); /*Mark index as taken*/
-                break;
-            }
+        uint16 lastIndex = uint16(availableIds.length - 1);
+        uint16 lastId = availableIds[lastIndex];
+        if (lastId == 0) {
+            lastId = lastIndex;
         }
+        // Set last value as swapped index
+        availableIds[swapIndex] = lastId;
+        // Remove potential value that was minted
+        availableIds.pop();
 
-        numTaken[_bitstringIndex]++; /*Increment the number we have taken so we mod by 1 less next time*/
-
-        // Return the total index to use as the pack offset
-        return ((_bitstringIndex * BITSTRING_LENGTH) + _index);
+        // Mint token (1-indexed to allow for genesis token to be pre-minted)
+        return newId + 1;
     }
 
     /// @dev Get the token ID to use for URI of a token ID
@@ -237,9 +239,11 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         _safeMint(_to, SONG_COUNT);
 
         // Find unused offset
-        uint256 _seed = uint256(blockhash(block.number - 1));
+        // uint256 _seed = uint256(blockhash(block.number - 1));
 
-        uint256 _offset = _getNextOffset(_seed);
+        uint256 _offset = _getNextOffset();
+        
+        // console.log("offset %s", _offset);
 
         offsets[_currentIndex] = _offset;
     }
