@@ -74,8 +74,6 @@ describe("Chaos E2E", function () {
         await chaosSongs.setPackContract(packContract.address);
         await packContract.setSongContract(chaosSongs.address);
 
-        console.log(await chaosSongs.unclaimed(0));
-
         await chaosSongs.mintSupercharged(
             accounts[0].address,
             config.supercharged
@@ -83,7 +81,7 @@ describe("Chaos E2E", function () {
         await chaosSongs.setSuperchargedOffset();
     });
 
-    it("Should offset the token IDs", async function () {
+    it.only("Should offset the token IDs", async function () {
         await packContract.mintReserve(5000, accounts[0].address)
         expect(await packContract.balanceOf(accounts[0].address)).to.equal(5000);
         for (let index = 0; index < 5000; index++) {

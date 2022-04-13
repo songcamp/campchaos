@@ -27,21 +27,10 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
 
 
-    /// Available IDS list
-    uint16[] private availableIds;
-    /// Entropy base
-    bytes32 entropyBase;
-    /* 
-    Random offset configuration
-    100 * 50 = 5000 packs
-    */
-    uint256 constant NUM_BITSTRINGS = 100; /*100 bitstrings to keep track of claimed offsets*/
-    uint256 constant BITSTRING_LENGTH = 50; /* */
-
+    mapping (uint256 => uint16) availableIds;
+    uint16 availableCount;
     mapping(uint256 => uint256) offsets;
 
-    bytes32[100] public unclaimed;
-    mapping(uint256 => uint256) numTaken;
 
     bool public superchargedOffsetIsSet; /*Track if supercharged offset is set to disallow pack opening and cause token ID issues*/
     uint256 public superchargedOffset; /*Track offset for first 1000 NFTs separately*/
@@ -98,10 +87,9 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         distributorFee = _distributorFee; /*Set optional fee for calling distribute*/
         
         // Create array of avilable ids (not initialized as a gas optimization)
-        availableIds = new uint16[](5000);
+        // availableIds = new uint16[](5000);
+        availableCount = 5000;
 
-        // Init entropy
-        _updateEntropy();
     }
 
     /*****************
@@ -157,42 +145,28 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     Internal RNG functions
     *****************/
     
-    /// @dev Updates entropy value hash
-    function _updateEntropy() internal {
-        entropyBase = keccak256(
-            abi.encodePacked(
-                msg.sender,
-                block.timestamp,
-                block.coinbase,
-                block.difficulty,
-                gasleft(),
-                tx.gasprice,
-                baseURI
-            )
-        );
-    }
     
     function _getNextOffset() internal returns (uint256){
-        require(availableIds.length > 0, "Sold out");
+        require(availableCount > 0, "Sold out");
         // This updates the entropy base for minting. Fairly simple but should work for this use case.
-        _updateEntropy();
+        uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
         // Get index of ID to mint from available ids
-        uint256 swapIndex = uint256(entropyBase) % availableIds.length;
+        uint256 swapIndex = _seed % availableCount;
         // Load in new id
         uint256 newId = availableIds[swapIndex];
         // If unset, assume equals index
         if (newId == 0) {
             newId = swapIndex;
         }
-        uint16 lastIndex = uint16(availableIds.length - 1);
+        uint16 lastIndex = availableCount - 1;
         uint16 lastId = availableIds[lastIndex];
         if (lastId == 0) {
             lastId = lastIndex;
         }
         // Set last value as swapped index
         availableIds[swapIndex] = lastId;
-        // Remove potential value that was minted
-        availableIds.pop();
+        
+        availableCount--;
 
         // Mint token (1-indexed to allow for genesis token to be pre-minted)
         return newId + 1;

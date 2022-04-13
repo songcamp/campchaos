@@ -59,8 +59,6 @@ describe("Chaos Songs", function () {
 
         await nftTokenContract.setPackContract(packContract.address);
 
-        console.log(await nftTokenContract.unclaimed(0));
-
         await nftTokenContract.mintSupercharged(
             accounts[0].address,
             config.supercharged
@@ -102,7 +100,7 @@ describe("Chaos Songs", function () {
     
     //
 
-    it.only("Should offset the token IDs", async function () {
+    it("Should offset the token IDs", async function () {
         for (let index = 0; index < 5000; index++) {
             const tx = await nftTokenContract.openPack(1);
             const receipt = await tx.wait();
