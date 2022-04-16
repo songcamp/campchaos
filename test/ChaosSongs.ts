@@ -46,7 +46,7 @@ describe("Chaos Songs", function () {
             accounts[0]
         )) as MockChaosPacks__factory;
         const packContract = await packFactory.deploy();
-        await packContract.setOwner(accounts[0].address);
+        await packContract.setOwner(accounts[1].address);
 
         splitContract = await splitFactory.deploy();
 
@@ -99,8 +99,55 @@ describe("Chaos Songs", function () {
     
     
     //
+    
+    describe.only("Pack opening", function () {
+        this.beforeEach(async function() {
+            nftTokenContract = nftTokenContract.connect(accounts[1])
+        })
+        it("Should Mint 4 NFTs on pack open", async function () {
+            expect(await nftTokenContract.balanceOf(accounts[1].address)).to.equal(0)
+            await nftTokenContract.openPack(1);
+            expect(await nftTokenContract.balanceOf(accounts[1].address)).to.equal(4)
+        });
 
-    it("Should offset the token IDs", async function () {
+        it("Should Mint 4 consecutive token IDs", async function () {
+            await nftTokenContract.openPack(1);
+            expect(await nftTokenContract.ownerOf(1000)).to.equal(accounts[1].address)
+            expect(await nftTokenContract.ownerOf(1001)).to.equal(accounts[1].address)
+            expect(await nftTokenContract.ownerOf(1002)).to.equal(accounts[1].address)
+            expect(await nftTokenContract.ownerOf(1003)).to.equal(accounts[1].address)
+        });
+        it("Should set a nonzero offset for the first token", async function () {
+            await nftTokenContract.openPack(1);
+            expect(await nftTokenContract.offsets(1000)).to.be.gt(0)
+            expect(await nftTokenContract.offsets(1001)).to.equal(0)
+            expect(await nftTokenContract.offsets(1002)).to.equal(0)
+            expect(await nftTokenContract.offsets(1003)).to.equal(0)
+        });
+        it("Should use the offset to shuffle the token ID", async function () {
+            await nftTokenContract.openPack(1);
+            const offset = await nftTokenContract.offsets(1000)
+            console.log({offset})
+            const songId = await nftTokenContract.getSongTokenId(1000)
+            console.log({songId})
+
+            // TODO make a mock to explicitly test shuffled token ID logic
+            expect(await nftTokenContract.getSongTokenId(1000)).to.equal(offset.mul(4).add(1000))
+            expect(await nftTokenContract.getSongTokenId(1001)).to.equal(offset.mul(4).add(1000).add(1))
+            expect(await nftTokenContract.getSongTokenId(1002)).to.equal(offset.mul(4).add(1000).add(2))
+            expect(await nftTokenContract.getSongTokenId(1003)).to.equal(offset.mul(4).add(1000).add(3))
+
+            await nftTokenContract.openPack(1);
+            const offset2 = await nftTokenContract.offsets(1004)
+            expect(await nftTokenContract.getSongTokenId(1004)).to.equal(offset2.mul(4).add(1000))
+            expect(await nftTokenContract.getSongTokenId(1005)).to.equal(offset2.mul(4).add(1000).add(1))
+            expect(await nftTokenContract.getSongTokenId(1006)).to.equal(offset2.mul(4).add(1000).add(2))
+            expect(await nftTokenContract.getSongTokenId(1007)).to.equal(offset2.mul(4).add(1000).add(3))
+        });
+
+    })
+
+    it.skip("Should offset the token IDs", async function () {
         for (let index = 0; index < 5000; index++) {
             const tx = await nftTokenContract.openPack(1);
             const receipt = await tx.wait();

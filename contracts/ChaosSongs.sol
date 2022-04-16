@@ -7,7 +7,7 @@ import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.s
 import "./ChaosPacks.sol";
 import "./external/interfaces/ISplitMain.sol";
 import "./external/erc721a/extensions/ERC721ABurnable.sol";
-import "./bits.sol";
+import "./BatchShuffle.sol";
 
 import "hardhat/console.sol";
 
@@ -21,16 +21,11 @@ error SuperchagedOffsetNotSet();
 /// @title Chaos Songs
 /// @notice
 /// @dev
-contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
+contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
     uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
     uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
     uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
-
-
-    mapping (uint256 => uint16) availableIds;
-    uint16 availableCount;
-    mapping(uint256 => uint256) offsets;
-
+    uint16 constant PACK_SUPPLY = 5e3;
 
     bool public superchargedOffsetIsSet; /*Track if supercharged offset is set to disallow pack opening and cause token ID issues*/
     uint256 public superchargedOffset; /*Track offset for first 1000 NFTs separately*/
@@ -61,7 +56,10 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         string memory _contractURI,
         address _splitMain,
         uint32 _distributorFee
-    ) ERC721A("Song Camp Chaos Songs", "SCCS") {
+    )
+        ERC721A("Song Camp Chaos Songs", "SCCS")
+        BatchShuffle(PACK_SUPPLY, SONG_COUNT, SUPERCHARGED_SUPPLY)
+    {
         _setBaseURI(baseURI_); /*Set token level metadata*/
         contractURI = _contractURI; /*Set marketplace metadata*/
 
@@ -85,11 +83,6 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
             )
         );
         distributorFee = _distributorFee; /*Set optional fee for calling distribute*/
-        
-        // Create array of avilable ids (not initialized as a gas optimization)
-        // availableIds = new uint16[](5000);
-        availableCount = 5000;
-
     }
 
     /*****************
@@ -108,7 +101,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
             revert PacksDisabledUntilSuperchargedComplete();
 
         packContract.burnPack(_packId); /*Opening a pack burns the pack NT*/
-        _mintSongs(msg.sender); /*Mint 4 songs to opener*/
+        _mintSongs(msg.sender, _currentIndex); /*Mint 4 songs to opener*/
     }
 
     /*****************
@@ -144,54 +137,16 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     /*****************
     Internal RNG functions
     *****************/
-    
-    
-    function _getNextOffset() internal returns (uint256){
-        require(availableCount > 0, "Sold out");
-        // This updates the entropy base for minting. Fairly simple but should work for this use case.
-        uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
-        // Get index of ID to mint from available ids
-        uint256 swapIndex = _seed % availableCount;
-        // Load in new id
-        uint256 newId = availableIds[swapIndex];
-        // If unset, assume equals index
-        if (newId == 0) {
-            newId = swapIndex;
-        }
-        uint16 lastIndex = availableCount - 1;
-        uint16 lastId = availableIds[lastIndex];
-        if (lastId == 0) {
-            lastId = lastIndex;
-        }
-        // Set last value as swapped index
-        availableIds[swapIndex] = lastId;
-        
-        availableCount--;
-
-        // Mint token (1-indexed to allow for genesis token to be pre-minted)
-        return newId + 1;
-    }
 
     /// @dev Get the token ID to use for URI of a token ID
     /// @param _tokenId Token to check
-    function getShuffledTokenId(uint256 _tokenId)
-        public
-        view
-        returns (uint256)
-    {
+    function getSongTokenId(uint256 _tokenId) public view returns (uint256) {
         if (!_exists(_tokenId)) revert URIQueryForNonexistentToken(); /*Only return for minted tokens*/
         uint256 _shuffledTokenId; /*Initialize shuffled token ID*/
 
         /*If not supercharged use individual offsets*/
-        if (_tokenId > SUPERCHARGED_SUPPLY) {
-            uint256 _floor = _tokenId - (_tokenId % SONG_COUNT); /*Offsets are stored for batches of 4 consecutive songs*/
-            uint256 _offset = offsets[_floor] * SONG_COUNT; /*Multiply by song count to get offset*/
-            _shuffledTokenId = _offset + _tokenId; /*Add to token ID to get shuffled I?D*/
-
-            /*Check if exceeds max supply*/
-            if (_shuffledTokenId > MAX_SUPPLY) {
-                _shuffledTokenId -= (MAX_SUPPLY + SUPERCHARGED_SUPPLY); /*Roll over to beginning of non-supercharged NFTs*/
-            }
+        if (_tokenId >= SUPERCHARGED_SUPPLY) {
+            _shuffledTokenId = getShuffledTokenId(_tokenId);
         } else {
             /*If supercharged use the supercharged offset*/
             if (!superchargedOffsetIsSet) revert SuperchagedOffsetNotSet(); /*Require that offset is set for this to return*/
@@ -209,17 +164,15 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     /*****************
     INTERNAL MINTING FUNCTIONS AND HELPERS
     *****************/
-    function _mintSongs(address _to) internal {
+    function _mintSongs(address _to, uint256 _offsetIndex) internal {
         _safeMint(_to, SONG_COUNT);
 
-        // Find unused offset
-        // uint256 _seed = uint256(blockhash(block.number - 1));
+        uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
+        uint256 _offset = _getNextOffset(_seed);
 
-        uint256 _offset = _getNextOffset();
-        
-        // console.log("offset %s", _offset);
+        console.log("offset %s for index %s", _offset, _offsetIndex);
 
-        offsets[_currentIndex] = _offset;
+        offsets[_offsetIndex] = _offset;
     }
 
     /*****************
@@ -265,10 +218,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
     /*****************
     CONFIG FUNCTIONS
     *****************/
-    function _startTokenId() internal view override returns (uint256) {
-        return 1;
-    }
-
+    
     // TODO lock song contract address?
     function setPackContract(address _packContract) external onlyOwner {
         packContract = ChaosPacks(_packContract);
@@ -298,11 +248,11 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BitwiseUtils {
         override
         returns (string memory)
     {
-        uint256 _shuffled = getShuffledTokenId(tokenId);
         require(
             _exists(tokenId),
             "ERC721Metadata: URI query for nonexistent token"
         );
+        uint256 _shuffled = getSongTokenId(tokenId);
 
         return
             bytes(baseURI).length > 0

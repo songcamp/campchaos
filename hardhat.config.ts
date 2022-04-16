@@ -27,6 +27,7 @@ const KOVAN_RPC_URL =
     process.env.KOVAN_RPC_URL ||
     "https://eth-kovan.alchemyapi.io/v2/your-api-key";
 const MNEMONIC = process.env.MNEMONIC || "your mnemonic";
+const ROPSTEN_RPC_URL = process.env.ROPSTEN_RPC_URL || 'https://eth-ropsten.alchemyapi.io/v2/your-api-key'
 const ETHERSCAN_API_KEY =
     process.env.ETHERSCAN_API_KEY || "Your etherscan API key";
 // optional
@@ -51,6 +52,10 @@ module.exports = {
                 mnemonic: MNEMONIC,
             },
             saveDeployments: true,
+        },
+        ropsten: {
+            url: ROPSTEN_RPC_URL,
+            accounts: PRIVATE_KEY ? [PRIVATE_KEY] : { mnemonic: MNEMONIC },
         },
         rinkeby: {
             url: RINKEBY_RPC_URL,
