@@ -31,6 +31,7 @@ abstract contract BatchShuffle {
         // uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
         // Get index of ID to mint from available ids
         uint256 swapIndex = _seed % availableCount;
+        // console.log(swapIndex);
         // Load in new id
         uint256 newId = availableIds[swapIndex];
         // If unset, assume equals index

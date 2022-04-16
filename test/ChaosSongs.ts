@@ -9,7 +9,6 @@ import {
     ChaosSongs__factory,
     SplitMain,
     SplitMain__factory,
-    MockChaosPacks,
     MockChaosPacks__factory,
 } from "../typechain";
 
@@ -58,105 +57,215 @@ describe("Chaos Songs", function () {
         );
 
         await nftTokenContract.setPackContract(packContract.address);
-
-        await nftTokenContract.mintSupercharged(
-            accounts[0].address,
-            config.supercharged
-        );
-        await nftTokenContract.setSuperchargedOffset();
     });
-    
-    // Pack opening - Avoids collisions
-    
-    // Pack opening - assigns offset to group of 4 songs
-    
-    // Constructor - sets up splits
-    
-    // Pack opening - fails if burn fails
-    
-    // Token URI - correctly assigns shuffled token ID for normal NFT
 
-    // Token URI - correctly assigns shuffled token ID for supercharged NFT
-    
+    // Constructor - sets up splits
+
+    // Pack opening - fails if burn fails
+
     // Supercharged - tracks balance of supercharged
-    
+
     // Supercharged - allows minting up to limit by owner
-    
+
     // Supercharged - does not allow otehrs to mint
-    
-    // Supercharged offests - allows to set once
-    
+
     // Distribute ETH - sends ETH to splits contract
-    
+
     // Token IDS - starts at 1
-    
+
     // Access control - set pack contract
-    
+
     // Access control - URIs
-    
+
     // Access control - fees
-    
-    
-    
+
     //
-    
+
     describe.only("Pack opening", function () {
-        this.beforeEach(async function() {
-            nftTokenContract = nftTokenContract.connect(accounts[1])
-        })
+        this.beforeEach(async function () {
+            await nftTokenContract.mintSupercharged(
+                accounts[0].address,
+                config.supercharged
+            );
+            await nftTokenContract.setSuperchargedOffset();
+            nftTokenContract = nftTokenContract.connect(accounts[1]);
+        });
         it("Should Mint 4 NFTs on pack open", async function () {
-            expect(await nftTokenContract.balanceOf(accounts[1].address)).to.equal(0)
+            expect(
+                await nftTokenContract.balanceOf(accounts[1].address)
+            ).to.equal(0);
             await nftTokenContract.openPack(1);
-            expect(await nftTokenContract.balanceOf(accounts[1].address)).to.equal(4)
+            expect(
+                await nftTokenContract.balanceOf(accounts[1].address)
+            ).to.equal(4);
         });
 
         it("Should Mint 4 consecutive token IDs", async function () {
             await nftTokenContract.openPack(1);
-            expect(await nftTokenContract.ownerOf(1000)).to.equal(accounts[1].address)
-            expect(await nftTokenContract.ownerOf(1001)).to.equal(accounts[1].address)
-            expect(await nftTokenContract.ownerOf(1002)).to.equal(accounts[1].address)
-            expect(await nftTokenContract.ownerOf(1003)).to.equal(accounts[1].address)
+            expect(await nftTokenContract.ownerOf(1000)).to.equal(
+                accounts[1].address
+            );
+            expect(await nftTokenContract.ownerOf(1001)).to.equal(
+                accounts[1].address
+            );
+            expect(await nftTokenContract.ownerOf(1002)).to.equal(
+                accounts[1].address
+            );
+            expect(await nftTokenContract.ownerOf(1003)).to.equal(
+                accounts[1].address
+            );
         });
         it("Should set a nonzero offset for the first token", async function () {
             await nftTokenContract.openPack(1);
-            expect(await nftTokenContract.offsets(1000)).to.be.gt(0)
-            expect(await nftTokenContract.offsets(1001)).to.equal(0)
-            expect(await nftTokenContract.offsets(1002)).to.equal(0)
-            expect(await nftTokenContract.offsets(1003)).to.equal(0)
+            if ((await nftTokenContract.offsets(1000)).eq(0)) {
+                // Small chance that offset is actually 0, in that case open another one
+                await nftTokenContract.openPack(1);
+            }
+            expect(await nftTokenContract.offsets(1000)).to.be.gt(0);
+            expect(await nftTokenContract.offsets(1001)).to.equal(0);
+            expect(await nftTokenContract.offsets(1002)).to.equal(0);
+            expect(await nftTokenContract.offsets(1003)).to.equal(0);
         });
         it("Should use the offset to shuffle the token ID", async function () {
             await nftTokenContract.openPack(1);
-            const offset = await nftTokenContract.offsets(1000)
-            console.log({offset})
-            const songId = await nftTokenContract.getSongTokenId(1000)
-            console.log({songId})
+            const offset = await nftTokenContract.offsets(1000);
+            console.log({ offset });
+            const songId = await nftTokenContract.getSongTokenId(1000);
+            console.log({ songId });
 
-            // TODO make a mock to explicitly test shuffled token ID logic
-            expect(await nftTokenContract.getSongTokenId(1000)).to.equal(offset.mul(4).add(1000))
-            expect(await nftTokenContract.getSongTokenId(1001)).to.equal(offset.mul(4).add(1000).add(1))
-            expect(await nftTokenContract.getSongTokenId(1002)).to.equal(offset.mul(4).add(1000).add(2))
-            expect(await nftTokenContract.getSongTokenId(1003)).to.equal(offset.mul(4).add(1000).add(3))
+            expect(await nftTokenContract.getSongTokenId(1000)).to.equal(
+                offset.mul(4).add(1000)
+            );
+            expect(await nftTokenContract.getSongTokenId(1001)).to.equal(
+                offset.mul(4).add(1000).add(1)
+            );
+            expect(await nftTokenContract.getSongTokenId(1002)).to.equal(
+                offset.mul(4).add(1000).add(2)
+            );
+            expect(await nftTokenContract.getSongTokenId(1003)).to.equal(
+                offset.mul(4).add(1000).add(3)
+            );
 
             await nftTokenContract.openPack(1);
-            const offset2 = await nftTokenContract.offsets(1004)
-            expect(await nftTokenContract.getSongTokenId(1004)).to.equal(offset2.mul(4).add(1000))
-            expect(await nftTokenContract.getSongTokenId(1005)).to.equal(offset2.mul(4).add(1000).add(1))
-            expect(await nftTokenContract.getSongTokenId(1006)).to.equal(offset2.mul(4).add(1000).add(2))
-            expect(await nftTokenContract.getSongTokenId(1007)).to.equal(offset2.mul(4).add(1000).add(3))
+            const offset2 = await nftTokenContract.offsets(1004);
+            expect(await nftTokenContract.getSongTokenId(1004)).to.equal(
+                offset2.mul(4).add(1000)
+            );
+            expect(await nftTokenContract.getSongTokenId(1005)).to.equal(
+                offset2.mul(4).add(1000).add(1)
+            );
+            expect(await nftTokenContract.getSongTokenId(1006)).to.equal(
+                offset2.mul(4).add(1000).add(2)
+            );
+            expect(await nftTokenContract.getSongTokenId(1007)).to.equal(
+                offset2.mul(4).add(1000).add(3)
+            );
         });
+        
+        it("Allows songs to be burned", async function() {
+            await nftTokenContract.openPack(1);
+            await nftTokenContract.burn(1000)
+            await expect(nftTokenContract.ownerOf(1000)).to.be.revertedWith('OwnerQueryForNonexistentToken()')
+        })
+    });
 
-    })
+    describe("Supercharged Setup", function () {
+        it("Does not allow pack opening if supercharged are not minted", async function () {
+            await expect(nftTokenContract.openPack(1)).to.be.revertedWith(
+                "PacksDisabledUntilSuperchargedComplete()"
+            );
+        });
+        it("Does not allow pack opening if supercharged offset is not set", async function () {
+            await nftTokenContract.mintSupercharged(
+                accounts[0].address,
+                config.supercharged
+            );
+            await expect(nftTokenContract.openPack(1)).to.be.revertedWith(
+                "PacksDisabledUntilSuperchargedComplete()"
+            );
+        });
+        it("Does not allow supercharged offset to be set if not minted", async function () {
+            await expect(
+                nftTokenContract.setSuperchargedOffset()
+            ).to.be.revertedWith("SuperchargeConfigurationNotReady()");
+        });
+        it("Does not allow supercharged offset to be set if already set", async function () {
+            await nftTokenContract.mintSupercharged(
+                accounts[0].address,
+                config.supercharged
+            );
+            await nftTokenContract.setSuperchargedOffset();
+            await expect(
+                nftTokenContract.setSuperchargedOffset()
+            ).to.be.revertedWith("SuperchargedOffsetAlreadySet()");
+        });
+    });
 
-    it.skip("Should offset the token IDs", async function () {
-        for (let index = 0; index < 5000; index++) {
-            const tx = await nftTokenContract.openPack(1);
-            const receipt = await tx.wait();
-            const gasUsed = receipt.gasUsed;
-            console.log({ index, gasUsed });
-        }
-        expect(await nftTokenContract.balanceOf(accounts[0].address)).to.equal(
-            20000
-        );
+    describe("Supercharged Offsets", function () {
+        let offset: number;
+        this.beforeEach(async function () {
+            await nftTokenContract.mintSupercharged(
+                accounts[0].address,
+                config.supercharged
+            );
+            await nftTokenContract.setSuperchargedOffset();
+            offset = (await nftTokenContract.superchargedOffset()).toNumber();
+        });
+        it("Offsets supercharged ID correctly when below supply", async function () {
+            const tokenId = 0;
+            const predictedId = tokenId + offset;
+            const shuffledId = await nftTokenContract.getSongTokenId(tokenId);
+            expect(shuffledId).to.equal(predictedId);
+        });
+        it("Offsets supercharged ID correctly when above supply", async function () {
+            const tokenId = 999;
+            const predictedId = tokenId + offset - config.supercharged;
+            const shuffledId = await nftTokenContract.getSongTokenId(tokenId);
+            expect(shuffledId).to.equal(predictedId);
+        });
+    });
+
+    describe("Supercharged Balances", function () {
+        let offset: number;
+        this.beforeEach(async function () {
+            await nftTokenContract.mintSupercharged(
+                accounts[0].address,
+                config.supercharged
+            );
+            await nftTokenContract.setSuperchargedOffset();
+            offset = (await nftTokenContract.superchargedOffset()).toNumber();
+        });
+        it("Tracks supercharged balances when tokens are transferred", async function () {
+            const superBalance0 = await nftTokenContract.superchargeBalances(
+                accounts[0].address
+            );
+            expect(superBalance0).to.equal(1000);
+            await nftTokenContract.transferFrom(
+                accounts[0].address,
+                accounts[1].address,
+                0
+            );
+            await nftTokenContract.transferFrom(
+                accounts[0].address,
+                accounts[1].address,
+                1
+            );
+            await nftTokenContract.transferFrom(
+                accounts[0].address,
+                accounts[1].address,
+                10
+            );
+
+            expect(
+                await nftTokenContract.superchargeBalances(accounts[0].address)
+            ).to.equal(997);
+            expect(
+                await nftTokenContract.superchargeBalances(accounts[1].address)
+            ).to.equal(3);
+        });
+        it("Does not allow supercharged tokens to be burned", async function () {
+            await expect(nftTokenContract.burn(1)).to.be.reverted; // todo error message
+        });
     });
 
     it.skip("Should allow reserve minting", async function () {

@@ -17,6 +17,7 @@ error PacksDisabledUntilSuperchargedComplete();
 error SuperchargedOffsetAlreadySet();
 error SuperchargeConfigurationNotReady();
 error SuperchagedOffsetNotSet();
+error InvalidOffset();
 
 /// @title Chaos Songs
 /// @notice
@@ -130,6 +131,8 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
 
         superchargedOffset = _seed % SUPERCHARGED_SUPPLY; /*Mod seed by supply to get offset*/
+        
+        if (superchargedOffset == 0) revert InvalidOffset();
 
         superchargedOffsetIsSet = true; /*Set offset so pack opening can begin and disable this function*/
     }
@@ -153,7 +156,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
             _shuffledTokenId = superchargedOffset + _tokenId; /*Supercharged offset is same for all tokens*/
 
             /*Check if exceeds max supply*/
-            if (_shuffledTokenId > SUPERCHARGED_SUPPLY) {
+            if (_shuffledTokenId >= SUPERCHARGED_SUPPLY) {
                 _shuffledTokenId -= SUPERCHARGED_SUPPLY; /*Roll over to beginning*/
             }
         }
@@ -169,8 +172,6 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
 
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
         uint256 _offset = _getNextOffset(_seed);
-
-        console.log("offset %s for index %s", _offset, _offsetIndex);
 
         offsets[_offsetIndex] = _offset;
     }
@@ -269,7 +270,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
         uint256 quantity
     ) internal override(ERC721A) {
         super._beforeTokenTransfers(from, to, startTokenId, quantity);
-        if (startTokenId <= SUPERCHARGED_SUPPLY) {
+        if (startTokenId < SUPERCHARGED_SUPPLY) {
             require(to != address(0)); /*Disallow burning of supercharged tokens*/
             if (from != address(0)) {
                 superchargeBalances[from]--;
