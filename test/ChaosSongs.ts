@@ -15,7 +15,7 @@ import {
 import { BaseProvider } from "@ethersproject/providers";
 
 const config = {
-    baseUri: "https://placeholder.com/{}.json",
+    baseUri: "https://placeholder.com/",
     contractUri: "https://placeholder.com/contract.json",
     supercharged: 1000,
     distributorFee: 0,
@@ -78,12 +78,6 @@ describe("Chaos Songs", function () {
 
     // Access control - set pack contract
 
-    // Access control - URIs
-
-    // Access control - fees
-
-    //
-
     describe("Pack opening", function () {
         this.beforeEach(async function () {
             await nftTokenContract.mintSupercharged(
@@ -93,6 +87,14 @@ describe("Chaos Songs", function () {
             await nftTokenContract.setSuperchargedOffset();
             nftTokenContract = nftTokenContract.connect(accounts[1]);
         });
+        it("Does not allow opening by non owner of pack", async function () {
+            nftTokenContract = await nftTokenContract.connect(
+                accounts[2]
+            );
+            await expect(nftTokenContract.openPack(1)).to.be.revertedWith(
+                "CallerIsNotTokenOwner()"
+            );
+        });
         it("Should Mint 4 NFTs on pack open", async function () {
             expect(
                 await nftTokenContract.balanceOf(accounts[1].address)
@@ -101,6 +103,14 @@ describe("Chaos Songs", function () {
             expect(
                 await nftTokenContract.balanceOf(accounts[1].address)
             ).to.equal(4);
+        });
+
+        it("Returns concatenated token URI", async function () {
+            await nftTokenContract.openPack(1);
+            const shuffledId = await nftTokenContract.getSongTokenId(1001);
+            expect(await nftTokenContract.tokenURI(1001)).to.equal(
+                config.baseUri + shuffledId.toString() + ".json"
+            );
         });
 
         it("Should Mint 4 consecutive token IDs", async function () {
@@ -142,9 +152,6 @@ describe("Chaos Songs", function () {
         it("Should use the offset to shuffle the token ID", async function () {
             await nftTokenContract.openPack(1);
             const offset = await nftTokenContract.offsets(1000);
-            console.log({ offset });
-            const songId = await nftTokenContract.getSongTokenId(1000);
-            console.log({ songId });
 
             expect(await nftTokenContract.getSongTokenId(1000)).to.equal(
                 offset.mul(4).add(1000)
@@ -201,6 +208,15 @@ describe("Chaos Songs", function () {
                 "PacksDisabledUntilSuperchargedComplete()"
             );
         });
+        it("Fails to get song ID if offset not set", async function () {
+            await nftTokenContract.mintSupercharged(
+                accounts[0].address,
+                config.supercharged
+            );
+            await expect(
+                nftTokenContract.getSongTokenId(50)
+            ).to.be.revertedWith("SuperchargedOffsetNotSet()");
+        });
         it("Allows owner to mint up to limit", async function () {
             await nftTokenContract.mintSupercharged(accounts[1].address, 500);
             await nftTokenContract.mintSupercharged(accounts[2].address, 500);
@@ -216,6 +232,49 @@ describe("Chaos Songs", function () {
             expect(
                 await nftTokenContract.superchargeBalances(accounts[2].address)
             ).to.equal(500);
+        });
+        it("Allows owner to mint up to limit in batch", async function () {
+            await nftTokenContract.batchMintSupercharged(
+                [accounts[1].address, accounts[2].address],
+                [500, 500]
+            );
+            expect(
+                await nftTokenContract.balanceOf(accounts[1].address)
+            ).to.equal(500);
+            expect(
+                await nftTokenContract.balanceOf(accounts[2].address)
+            ).to.equal(500);
+            expect(
+                await nftTokenContract.superchargeBalances(accounts[1].address)
+            ).to.equal(500);
+            expect(
+                await nftTokenContract.superchargeBalances(accounts[2].address)
+            ).to.equal(500);
+        });
+        it("Does not allow owner to mint past max in batch", async function () {
+            await expect(
+                nftTokenContract.batchMintSupercharged(
+                    [accounts[1].address, accounts[2].address],
+                    [500, 501]
+                )
+            ).to.be.revertedWith("MaxSupplyExceeded()");
+        });
+        it("Fails if array lengths are mismatched", async function () {
+            await expect(
+                nftTokenContract.batchMintSupercharged(
+                    [accounts[1].address, accounts[2].address],
+                    [500]
+                )
+            ).to.be.revertedWith("LengthMismatch()");
+        });
+        it("Does not allow anyone else to mint in batch", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.batchMintSupercharged(
+                    [accounts[1].address, accounts[1].address],
+                    [500, 500]
+                )
+            ).to.be.revertedWith("Ownable: caller is not the owner");
         });
         it("Starts token IDs at 0", async function () {
             await nftTokenContract.mintSupercharged(accounts[1].address, 1000);
@@ -292,6 +351,12 @@ describe("Chaos Songs", function () {
             const shuffledId = await nftTokenContract.getSongTokenId(tokenId);
             expect(shuffledId).to.equal(predictedId);
         });
+        it("Returns concatenated token URI", async function () {
+            const shuffledId = await nftTokenContract.getSongTokenId(50);
+            expect(await nftTokenContract.tokenURI(50)).to.equal(
+                config.baseUri + shuffledId.toString() + ".json"
+            );
+        });
     });
 
     describe("Supercharged Balances", function () {
@@ -357,32 +422,135 @@ describe("Chaos Songs", function () {
 
     describe("Royalties", function () {
         it("Allows the contract to receive royalties", async function () {
-            const balanceBefore = await provider.getBalance(nftTokenContract.address);
+            const balanceBefore = await provider.getBalance(
+                nftTokenContract.address
+            );
             await accounts[0].sendTransaction({
                 to: nftTokenContract.address,
                 value: ethers.utils.parseEther("10"),
             });
-            const balanceAfter = await provider.getBalance(nftTokenContract.address);
+            const balanceAfter = await provider.getBalance(
+                nftTokenContract.address
+            );
 
-            expect(balanceAfter.sub(balanceBefore).eq(ethers.utils.parseEther("10"))).to.be.true
+            expect(
+                balanceAfter
+                    .sub(balanceBefore)
+                    .eq(ethers.utils.parseEther("10"))
+            ).to.be.true;
         });
         it("Exposes 2981 interface to send royalties to contract", async function () {
-            const royalties = await nftTokenContract.royaltyInfo(1, ethers.utils.parseEther("10"))
-            expect(royalties._receiver).to.equal(nftTokenContract.address)
-            expect(royalties._royaltyAmount.eq(ethers.utils.parseEther("1"))).to.be.true
+            const royalties = await nftTokenContract.royaltyInfo(
+                1,
+                ethers.utils.parseEther("10")
+            );
+            expect(royalties._receiver).to.equal(nftTokenContract.address);
+            expect(royalties._royaltyAmount.eq(ethers.utils.parseEther("1"))).to
+                .be.true;
         });
     });
 
     describe("Configuration & Access Control", function () {
-        it("Allows owner to set distributor fee", async function () {});
-        it("Does not allow anyone else to set distributor fee", async function () {});
-        it("Returns concatenated token URI", async function () {});
-        it("Fails to return token URI if token non existent", async function () {});
-        it("Allows owner to set contract URI", async function () {});
-        it("Does not allow anyone else to set contract URI", async function () {});
-        it("Allows owner to set base URI", async function () {});
-        it("Does not allow anyone else to set base URI", async function () {});
-        it("Does not allow anyone owner to set base URI after supercharged offset is set", async function () {});
+        it("Allows owner to set distributor fee", async function () {
+            expect(await nftTokenContract.distributorFee()).to.equal(0);
+            await nftTokenContract.setDistributorFee(100);
+            expect(await nftTokenContract.distributorFee()).to.equal(100);
+        });
+        it("Does not allow anyone else to set distributor fee", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.setDistributorFee(100)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+        it("Allows owner to set royalty points", async function () {
+            expect(await nftTokenContract.royaltyPoints()).to.equal(1000);
+            await nftTokenContract.setRoyaltyPoints(100);
+            expect(await nftTokenContract.royaltyPoints()).to.equal(100);
+        });
+        it("Does not allow anyone else to set royalty poinst", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.setRoyaltyPoints(100)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+        it("Allows owner to set pack contract", async function () {
+            expect(await nftTokenContract.packContract()).to.equal(
+                packContract.address
+            );
+            await nftTokenContract.setPackContract(accounts[2].address);
+            expect(await nftTokenContract.packContract()).to.equal(
+                accounts[2].address
+            );
+        });
+        it("Does not allow anyone else to set pack contract", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.setPackContract(accounts[2].address)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+        it("Fails to return song ID if token ID does not exist", async function () {
+            await expect(
+                nftTokenContract.getSongTokenId(500)
+            ).to.be.revertedWith("URIQueryForNonexistentToken()");
+            await expect(
+                nftTokenContract.getSongTokenId(2000)
+            ).to.be.revertedWith("URIQueryForNonexistentToken()");
+        });
+        it("Fails to return token URI if token non existent", async function () {
+            await expect(nftTokenContract.tokenURI(500)).to.be.revertedWith(
+                "URIQueryForNonexistentToken()"
+            );
+            await expect(nftTokenContract.tokenURI(2000)).to.be.revertedWith(
+                "URIQueryForNonexistentToken()"
+            );
+        });
+        it("Allows owner to set contract URI", async function () {
+            expect(await nftTokenContract.contractURI()).to.equal(
+                config.contractUri
+            );
+            await nftTokenContract.setContractURI("new");
+            expect(await nftTokenContract.contractURI()).to.equal("new");
+        });
+        it("Does not allow anyone else to set contract URI", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.setContractURI("new")
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+        it("Allows owner to set base URI", async function () {
+            expect(await nftTokenContract.baseURI()).to.equal(config.baseUri);
+            await nftTokenContract.setBaseURI("new");
+            expect(await nftTokenContract.baseURI()).to.equal("new");
+        });
+        it("Allows owner to set base URI after minting supercharged", async function () {
+            expect(await nftTokenContract.baseURI()).to.equal(config.baseUri);
+            await nftTokenContract.mintSupercharged(accounts[1].address, 1000);
+            await nftTokenContract.setBaseURI("new");
+            expect(await nftTokenContract.baseURI()).to.equal("new");
+        });
+        it("Does not allow anyone else to set base URI", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.setContractURI("new")
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+        it("Does not allow anyone owner to set base URI after supercharged offset is set", async function () {
+            await nftTokenContract.mintSupercharged(accounts[1].address, 1000);
+            await nftTokenContract.setSuperchargedOffset();
+            await expect(nftTokenContract.setBaseURI("new")).to.be.revertedWith(
+                "SuperchargedOffsetAlreadySet()"
+            );
+        });
+        it("Uses new base URI in token URI", async function () {
+            expect(await nftTokenContract.baseURI()).to.equal(config.baseUri);
+            await nftTokenContract.mintSupercharged(accounts[1].address, 1000);
+            await nftTokenContract.setBaseURI("new");
+            await nftTokenContract.setSuperchargedOffset();
+            const shuffledId = await nftTokenContract.getSongTokenId(500);
+            expect(await nftTokenContract.tokenURI(500)).to.equal(
+                "new" + shuffledId + ".json"
+            );
+        });
     });
 
     it.skip("Should allow liquid splits distributions in worst case", async function () {

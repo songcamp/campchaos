@@ -10,21 +10,19 @@ import "./external/erc721a/extensions/ERC721ABurnable.sol";
 import "./BatchShuffle.sol";
 import "./Royalties/ERC2981/IERC2981Royalties.sol";
 
-import "hardhat/console.sol";
 
 error MaxSupplyExceeded();
 error CallerIsNotTokenOwner();
 error PacksDisabledUntilSuperchargedComplete();
 error SuperchargedOffsetAlreadySet();
 error SuperchargeConfigurationNotReady();
-error SuperchagedOffsetNotSet();
+error SuperchargedOffsetNotSet();
 error InvalidOffset();
 error LengthMismatch();
 error BurnPackFailed();
 
 /// @title Chaos Songs
-/// @notice
-/// @dev
+/// @notice Distribute random selection of 4 songs to Chaos Pack holders
 contract ChaosSongs is
     ERC721ABurnable,
     Ownable,
@@ -34,11 +32,10 @@ contract ChaosSongs is
     uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
     uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
     uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
-    uint16 constant PACK_SUPPLY = 5e3;
+    uint16 constant PACK_SUPPLY = 5e3; /*Supply of packs determines number of offsets*/
 
-    uint256 royaltyPoints; /*Royalty percentage / 10000*/
+    uint256 public royaltyPoints; /*Royalty percentage / 10000*/
 
-    bool public superchargedOffsetIsSet; /*Track if supercharged offset is set to disallow pack opening and cause token ID issues*/
     uint256 public superchargedOffset; /*Track offset for first 1000 NFTs separately*/
 
     ChaosPacks public packContract; /*External contract to use for pack NFTs*/
@@ -48,7 +45,7 @@ contract ChaosSongs is
     mapping(address => uint32) public superchargeBalances; /*Track supercharged balance separately for liquid splits*/
     address payable public payoutSplit; /* 0xSplits address for split */
     ISplitMain public splitMain; /* 0xSplits address for updating & distributing split */
-    uint32 internal distributorFee; /* 0xSplits distributorFee payable to third parties covering gas of distribution */
+    uint32 public distributorFee; /* 0xSplits distributorFee payable to third parties covering gas of distribution */
 
     /*Contract config*/
     using Strings for uint256;
@@ -94,7 +91,7 @@ contract ChaosSongs is
         );
         distributorFee = _distributorFee; /*Set optional fee for calling distribute*/
 
-        royaltyPoints = _royaltyPoints;
+        royaltyPoints = _royaltyPoints; /*Set royalty amount out of 10000*/
     }
 
     /*****************
@@ -108,7 +105,7 @@ contract ChaosSongs is
             /*Only pack owner can open pack*/
             revert CallerIsNotTokenOwner();
 
-        if (!superchargedOffsetIsSet)
+        if (superchargedOffset == 0)
             /*Pack opening disabled until supercharged tokensa are configured*/
             revert PacksDisabledUntilSuperchargedComplete();
 
@@ -119,20 +116,18 @@ contract ChaosSongs is
     /*****************
     Permissioned Minting
     *****************/
+
     /// @dev Mint the supercharged tokens to proper destination
     /// @param _to Recipient
     /// @param _amount Number of tokens to send
     // TODO distribute via a different contract?
-    function _mintSupercharged(address _to, uint256 _amount) internal {
-        if ((totalSupply() + _amount > SUPERCHARGED_SUPPLY))
-            revert MaxSupplyExceeded(); /*Revert if max supply exceeded*/
-        _safeMint(_to, _amount); /*Batch mint*/
-    }
-
     function mintSupercharged(address _to, uint256 _amount) external onlyOwner {
         _mintSupercharged(_to, _amount);
     }
 
+    /// @dev Mint the supercharged tokens to proper destination in batches
+    /// @param _tos Recipients
+    /// @param _amounts Numbers of tokens to send
     function batchMintSupercharged(
         address[] calldata _tos,
         uint256[] calldata _amounts
@@ -161,9 +156,11 @@ contract ChaosSongs is
     /*****************
     RNG Config
     *****************/
+    /// @notice Set the offset using on chain entropy for the resere minted tokens
     /// @dev Should be done AFTER distribution, BEFORE pack opening
+    ///     In rare case that offset is 0, allow owner to rerun
     function setSuperchargedOffset() external onlyOwner {
-        if (superchargedOffsetIsSet) revert SuperchargedOffsetAlreadySet(); /*Can only be set once*/
+        if (superchargedOffset != 0) revert SuperchargedOffsetAlreadySet(); /*Can only be set once*/
         if (totalSupply() != SUPERCHARGED_SUPPLY)
             /*Must be done after supercharge minting is complete before pack opening*/
             revert SuperchargeConfigurationNotReady();
@@ -171,16 +168,11 @@ contract ChaosSongs is
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
 
         superchargedOffset = _seed % SUPERCHARGED_SUPPLY; /*Mod seed by supply to get offset*/
-
-        if (superchargedOffset == 0) revert InvalidOffset();
-
-        superchargedOffsetIsSet = true; /*Set offset so pack opening can begin and disable this function*/
     }
 
     /*****************
     Internal RNG functions
     *****************/
-
     /// @dev Get the token ID to use for URI of a token ID
     /// @param _tokenId Token to check
     function getSongTokenId(uint256 _tokenId) public view returns (uint256) {
@@ -192,7 +184,7 @@ contract ChaosSongs is
             _shuffledTokenId = getShuffledTokenId(_tokenId);
         } else {
             /*If supercharged use the supercharged offset*/
-            if (!superchargedOffsetIsSet) revert SuperchagedOffsetNotSet(); /*Require that offset is set for this to return*/
+            if (superchargedOffset == 0) revert SuperchargedOffsetNotSet(); /*Require that offset is set for this to return*/
             _shuffledTokenId = superchargedOffset + _tokenId; /*Supercharged offset is same for all tokens*/
 
             /*Check if exceeds max supply*/
@@ -214,6 +206,15 @@ contract ChaosSongs is
         uint256 _offset = _getNextOffset(_seed);
 
         offsets[_offsetIndex] = _offset;
+    }
+    
+    /// @dev Mint the supercharged tokens to proper destination - internal utility
+    /// @param _to Recipient
+    /// @param _amount Number of tokens to send
+    function _mintSupercharged(address _to, uint256 _amount) internal {
+        if ((totalSupply() + _amount > SUPERCHARGED_SUPPLY))
+            revert MaxSupplyExceeded(); /*Revert if max supply exceeded*/
+        _safeMint(_to, _amount); /*Batch mint*/
     }
 
     /*****************
@@ -281,7 +282,7 @@ contract ChaosSongs is
     /// @dev only possible before supercharged offset is set
     /// @param baseURI_ String to prepend to token IDs
     function setBaseURI(string memory baseURI_) external onlyOwner {
-        if (superchargedOffsetIsSet) revert SuperchargedOffsetAlreadySet();
+        if (superchargedOffset != 0) revert SuperchargedOffsetAlreadySet();
         _setBaseURI(baseURI_);
     }
 
@@ -297,16 +298,16 @@ contract ChaosSongs is
         royaltyPoints = _royaltyPoints;
     }
 
+    /*****************
+    Public view interfaces
+    *****************/
     function tokenURI(uint256 tokenId)
         public
         view
         override
         returns (string memory)
     {
-        require(
-            _exists(tokenId),
-            "ERC721Metadata: URI query for nonexistent token"
-        );
+        require(_exists(tokenId), "URIQueryForNonexistentToken()");
         uint256 _shuffled = getSongTokenId(tokenId);
 
         return
@@ -317,6 +318,9 @@ contract ChaosSongs is
                 : "";
     }
 
+    /*****************
+    Hooks
+    *****************/
     function _beforeTokenTransfers(
         address from,
         address to,
