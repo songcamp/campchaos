@@ -84,9 +84,10 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
         _safeMint(_to, _quantity);
     }
 
-    function burnPack(uint256 _packId) external {
+    function burnPack(uint256 _packId) external returns (bool){
         require(msg.sender == songContract);
         _burn(_packId);
+        return true;
         // TODO event
     }
 
@@ -146,10 +147,6 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
     /// @param _contractURI Contract metadata json
     function setContractURI(string memory _contractURI) external onlyOwner {
         contractURI = _contractURI;
-    }
-
-    function _startTokenId() internal view override returns (uint256) {
-        return 1;
     }
 
     function tokenURI(uint256 tokenId)

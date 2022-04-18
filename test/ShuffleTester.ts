@@ -15,7 +15,7 @@ function countOccurences(arrIn: number[]) {
     return out;
 }
 
-describe.only("Shuffle Tester", function () {
+describe("Shuffle Tester", function () {
     let accounts: SignerWithAddress[];
     let shuffleTester: ShuffleTester;
 

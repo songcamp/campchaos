@@ -5,7 +5,9 @@ pragma solidity 0.8.4;
 /// @notice
 /// @dev
 contract MockChaosPacks {
-    uint256 private _variable;
+    
+    bool private _burnDisabled;
+    bool private _makeBurnSucceed = true;
     
     address private _tokenOwner;
     
@@ -16,8 +18,17 @@ contract MockChaosPacks {
     function ownerOf(uint256 _tokenId) external view returns (address) {
         return _tokenOwner;
     }
+    
+    function disableBurn(bool _disabled) external {
+        _burnDisabled = _disabled;
+    }
 
-    function burnPack(uint256 _packId) external {
-        _variable = _packId;
+    function makeBurnSucceed(bool _succeed) external {
+        _makeBurnSucceed = _succeed;
+    }
+
+    function burnPack(uint256 _packId) external returns (bool){
+        require(!_burnDisabled);
+        return _makeBurnSucceed;
     }
 }

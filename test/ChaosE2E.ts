@@ -19,11 +19,11 @@ const config = {
     supercharged: 1000,
     distributorFee: 0,
     recipient: "0xd1ed25240ecfa47fD2d46D34584c91935c89546c",
+    royalties: 1000
 };
 
-let thousandAddresses = addresses;
 
-describe("Chaos E2E", function () {
+describe.skip("Chaos E2E", function () {
     let accounts: SignerWithAddress[];
     let chaosSongs: ChaosSongs;
     let packContract: ChaosPacks;
@@ -68,6 +68,7 @@ describe("Chaos E2E", function () {
             config.baseUri,
             config.contractUri,
             splitContract.address,
+            config.royalties,
             config.distributorFee
         );
 

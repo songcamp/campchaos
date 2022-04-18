@@ -9,8 +9,10 @@ import {
     ChaosSongs__factory,
     SplitMain,
     SplitMain__factory,
+    MockChaosPacks,
     MockChaosPacks__factory,
 } from "../typechain";
+import { BaseProvider } from "@ethersproject/providers";
 
 const config = {
     baseUri: "https://placeholder.com/{}.json",
@@ -18,33 +20,43 @@ const config = {
     supercharged: 1000,
     distributorFee: 0,
     recipient: "0xd1ed25240ecfa47fD2d46D34584c91935c89546c",
+    royalties: 1000,
 };
 
 let thousandAddresses = addresses;
 
 describe("Chaos Songs", function () {
+    let provider: BaseProvider;
     let accounts: SignerWithAddress[];
     let nftTokenContract: ChaosSongs;
     let splitContract: SplitMain;
+    let packContract: MockChaosPacks;
 
-    beforeEach(async function () {
+    let nftTokenFactory: ChaosSongs__factory;
+    let splitFactory: SplitMain__factory;
+    let packFactory: MockChaosPacks__factory;
+
+    this.beforeAll(async function () {
         accounts = await ethers.getSigners();
-
-        const nftTokenFactory = (await ethers.getContractFactory(
+        provider = ethers.provider;
+        nftTokenFactory = (await ethers.getContractFactory(
             "ChaosSongs",
             accounts[0]
         )) as ChaosSongs__factory;
 
-        const splitFactory = (await ethers.getContractFactory(
+        splitFactory = (await ethers.getContractFactory(
             "SplitMain",
             accounts[0]
         )) as SplitMain__factory;
 
-        const packFactory = (await ethers.getContractFactory(
+        packFactory = (await ethers.getContractFactory(
             "MockChaosPacks",
             accounts[0]
         )) as MockChaosPacks__factory;
-        const packContract = await packFactory.deploy();
+    });
+
+    beforeEach(async function () {
+        packContract = await packFactory.deploy();
         await packContract.setOwner(accounts[1].address);
 
         splitContract = await splitFactory.deploy();
@@ -53,6 +65,7 @@ describe("Chaos Songs", function () {
             config.baseUri,
             config.contractUri,
             splitContract.address,
+            config.royalties,
             config.distributorFee
         );
 
@@ -61,17 +74,7 @@ describe("Chaos Songs", function () {
 
     // Constructor - sets up splits
 
-    // Pack opening - fails if burn fails
-
-    // Supercharged - tracks balance of supercharged
-
-    // Supercharged - allows minting up to limit by owner
-
-    // Supercharged - does not allow otehrs to mint
-
     // Distribute ETH - sends ETH to splits contract
-
-    // Token IDS - starts at 1
 
     // Access control - set pack contract
 
@@ -81,7 +84,7 @@ describe("Chaos Songs", function () {
 
     //
 
-    describe.only("Pack opening", function () {
+    describe("Pack opening", function () {
         this.beforeEach(async function () {
             await nftTokenContract.mintSupercharged(
                 accounts[0].address,
@@ -113,6 +116,16 @@ describe("Chaos Songs", function () {
             );
             expect(await nftTokenContract.ownerOf(1003)).to.equal(
                 accounts[1].address
+            );
+        });
+        it("Fails if burn fails", async function () {
+            await packContract.disableBurn(true);
+            await expect(nftTokenContract.openPack(1)).to.be.reverted;
+        });
+        it("Fails if burn does not return true", async function () {
+            await packContract.makeBurnSucceed(false);
+            await expect(nftTokenContract.openPack(1)).to.be.revertedWith(
+                "BurnPackFailed()"
             );
         });
         it("Should set a nonzero offset for the first token", async function () {
@@ -161,16 +174,19 @@ describe("Chaos Songs", function () {
                 offset2.mul(4).add(1000).add(3)
             );
         });
-        
-        it("Allows songs to be burned", async function() {
+
+        it("Allows songs to be burned", async function () {
             await nftTokenContract.openPack(1);
-            await nftTokenContract.burn(1000)
-            await expect(nftTokenContract.ownerOf(1000)).to.be.revertedWith('OwnerQueryForNonexistentToken()')
-        })
+            await nftTokenContract.burn(1000);
+            await expect(nftTokenContract.ownerOf(1000)).to.be.revertedWith(
+                "OwnerQueryForNonexistentToken()"
+            );
+        });
     });
 
     describe("Supercharged Setup", function () {
         it("Does not allow pack opening if supercharged are not minted", async function () {
+            nftTokenContract = nftTokenContract.connect(accounts[1]);
             await expect(nftTokenContract.openPack(1)).to.be.revertedWith(
                 "PacksDisabledUntilSuperchargedComplete()"
             );
@@ -180,9 +196,62 @@ describe("Chaos Songs", function () {
                 accounts[0].address,
                 config.supercharged
             );
+            nftTokenContract = nftTokenContract.connect(accounts[1]);
             await expect(nftTokenContract.openPack(1)).to.be.revertedWith(
                 "PacksDisabledUntilSuperchargedComplete()"
             );
+        });
+        it("Allows owner to mint up to limit", async function () {
+            await nftTokenContract.mintSupercharged(accounts[1].address, 500);
+            await nftTokenContract.mintSupercharged(accounts[2].address, 500);
+            expect(
+                await nftTokenContract.balanceOf(accounts[1].address)
+            ).to.equal(500);
+            expect(
+                await nftTokenContract.balanceOf(accounts[2].address)
+            ).to.equal(500);
+            expect(
+                await nftTokenContract.superchargeBalances(accounts[1].address)
+            ).to.equal(500);
+            expect(
+                await nftTokenContract.superchargeBalances(accounts[2].address)
+            ).to.equal(500);
+        });
+        it("Starts token IDs at 0", async function () {
+            await nftTokenContract.mintSupercharged(accounts[1].address, 1000);
+            expect(await nftTokenContract.ownerOf(0)).to.equal(
+                accounts[1].address
+            );
+            expect(await nftTokenContract.ownerOf(999)).to.equal(
+                accounts[1].address
+            );
+            await expect(nftTokenContract.ownerOf(1000)).to.be.revertedWith(
+                "OwnerQueryForNonexistentToken()"
+            );
+        });
+        it("Does not allow minting past max", async function () {
+            await expect(
+                nftTokenContract.mintSupercharged(accounts[1].address, 1001)
+            ).to.be.revertedWith("MaxSupplyExceeded()");
+            await nftTokenContract.mintSupercharged(
+                accounts[0].address,
+                config.supercharged
+            );
+            await expect(
+                nftTokenContract.mintSupercharged(accounts[1].address, 1)
+            ).to.be.revertedWith("MaxSupplyExceeded()");
+            await expect(
+                nftTokenContract.mintSupercharged(accounts[1].address, 5)
+            ).to.be.revertedWith("MaxSupplyExceeded()");
+        });
+        it("Does not allow supercharged minting by non owner", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.mintSupercharged(
+                    accounts[0].address,
+                    config.supercharged
+                )
+            ).to.be.revertedWith("Ownable: caller is not the owner");
         });
         it("Does not allow supercharged offset to be set if not minted", async function () {
             await expect(
@@ -226,14 +295,12 @@ describe("Chaos Songs", function () {
     });
 
     describe("Supercharged Balances", function () {
-        let offset: number;
         this.beforeEach(async function () {
             await nftTokenContract.mintSupercharged(
                 accounts[0].address,
                 config.supercharged
             );
             await nftTokenContract.setSuperchargedOffset();
-            offset = (await nftTokenContract.superchargedOffset()).toNumber();
         });
         it("Tracks supercharged balances when tokens are transferred", async function () {
             const superBalance0 = await nftTokenContract.superchargeBalances(
@@ -268,12 +335,54 @@ describe("Chaos Songs", function () {
         });
     });
 
-    it.skip("Should allow reserve minting", async function () {
-        await nftTokenContract.mintSupercharged(config.recipient, 1);
-        expect(await nftTokenContract.ownerOf(1)).to.equal(config.recipient);
-        expect(
-            await nftTokenContract.superchargeBalances(config.recipient)
-        ).to.equal(1);
+    describe("Liquid splits", function () {
+        it("Should allow liquid splits distributions in expected case", async function () {
+            const onehundredaddresses = thousandAddresses.slice(-100);
+            for (let index = 0; index < onehundredaddresses.length; index++) {
+                await nftTokenContract.mintSupercharged(
+                    onehundredaddresses[index],
+                    10
+                );
+            }
+            await accounts[0].sendTransaction({
+                to: nftTokenContract.address,
+                value: ethers.utils.parseEther("10"),
+            });
+            await nftTokenContract.distributeETH(
+                onehundredaddresses,
+                accounts[0].address
+            );
+        });
+    });
+
+    describe("Royalties", function () {
+        it("Allows the contract to receive royalties", async function () {
+            const balanceBefore = await provider.getBalance(nftTokenContract.address);
+            await accounts[0].sendTransaction({
+                to: nftTokenContract.address,
+                value: ethers.utils.parseEther("10"),
+            });
+            const balanceAfter = await provider.getBalance(nftTokenContract.address);
+
+            expect(balanceAfter.sub(balanceBefore).eq(ethers.utils.parseEther("10"))).to.be.true
+        });
+        it("Exposes 2981 interface to send royalties to contract", async function () {
+            const royalties = await nftTokenContract.royaltyInfo(1, ethers.utils.parseEther("10"))
+            expect(royalties._receiver).to.equal(nftTokenContract.address)
+            expect(royalties._royaltyAmount.eq(ethers.utils.parseEther("1"))).to.be.true
+        });
+    });
+
+    describe("Configuration & Access Control", function () {
+        it("Allows owner to set distributor fee", async function () {});
+        it("Does not allow anyone else to set distributor fee", async function () {});
+        it("Returns concatenated token URI", async function () {});
+        it("Fails to return token URI if token non existent", async function () {});
+        it("Allows owner to set contract URI", async function () {});
+        it("Does not allow anyone else to set contract URI", async function () {});
+        it("Allows owner to set base URI", async function () {});
+        it("Does not allow anyone else to set base URI", async function () {});
+        it("Does not allow anyone owner to set base URI after supercharged offset is set", async function () {});
     });
 
     it.skip("Should allow liquid splits distributions in worst case", async function () {
@@ -331,23 +440,6 @@ describe("Chaos Songs", function () {
         });
         await nftTokenContract.distributeETH(
             fivehundredaddresses,
-            accounts[0].address
-        );
-    });
-    it.skip("Should allow liquid splits distributions in expected case", async function () {
-        const onehundredaddresses = thousandAddresses.slice(-100);
-        for (let index = 0; index < onehundredaddresses.length; index++) {
-            await nftTokenContract.mintSupercharged(
-                onehundredaddresses[index],
-                10
-            );
-        }
-        await accounts[0].sendTransaction({
-            to: nftTokenContract.address,
-            value: ethers.utils.parseEther("10"),
-        });
-        await nftTokenContract.distributeETH(
-            onehundredaddresses,
             accounts[0].address
         );
     });

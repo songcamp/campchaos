@@ -39,7 +39,7 @@ describe("Chaos Packs", function () {
             5,
             "0xd1ed25240ecfa47fD2d46D34584c91935c89546c"
         );
-        expect(await nftTokenContract.ownerOf(1)).to.equal(
+        expect(await nftTokenContract.ownerOf(0)).to.equal(
             "0xd1ed25240ecfa47fD2d46D34584c91935c89546c"
         );
     });

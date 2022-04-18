@@ -8,6 +8,7 @@ import "./ChaosPacks.sol";
 import "./external/interfaces/ISplitMain.sol";
 import "./external/erc721a/extensions/ERC721ABurnable.sol";
 import "./BatchShuffle.sol";
+import "./Royalties/ERC2981/IERC2981Royalties.sol";
 
 import "hardhat/console.sol";
 
@@ -18,15 +19,24 @@ error SuperchargedOffsetAlreadySet();
 error SuperchargeConfigurationNotReady();
 error SuperchagedOffsetNotSet();
 error InvalidOffset();
+error LengthMismatch();
+error BurnPackFailed();
 
 /// @title Chaos Songs
 /// @notice
 /// @dev
-contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
+contract ChaosSongs is
+    ERC721ABurnable,
+    Ownable,
+    BatchShuffle,
+    IERC2981Royalties
+{
     uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
     uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
     uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
     uint16 constant PACK_SUPPLY = 5e3;
+
+    uint256 royaltyPoints; /*Royalty percentage / 10000*/
 
     bool public superchargedOffsetIsSet; /*Track if supercharged offset is set to disallow pack opening and cause token ID issues*/
     uint256 public superchargedOffset; /*Track offset for first 1000 NFTs separately*/
@@ -45,8 +55,6 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
     string public contractURI; /*contractURI contract metadata json*/
     string public baseURI; /*baseURI_ String to prepend to token IDs*/
 
-    // TODO ERC2981 for royalties
-
     /// @notice Constructor sets contract metadata configurations and split interfaces
     /// @param baseURI_ Base URI for token metadata
     /// @param _contractURI URI for marketplace contract metadata
@@ -56,6 +64,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
         string memory baseURI_,
         string memory _contractURI,
         address _splitMain,
+        uint256 _royaltyPoints,
         uint32 _distributorFee
     )
         ERC721A("Song Camp Chaos Songs", "SCCS")
@@ -84,6 +93,8 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
             )
         );
         distributorFee = _distributorFee; /*Set optional fee for calling distribute*/
+
+        royaltyPoints = _royaltyPoints;
     }
 
     /*****************
@@ -101,7 +112,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
             /*Pack opening disabled until supercharged tokensa are configured*/
             revert PacksDisabledUntilSuperchargedComplete();
 
-        packContract.burnPack(_packId); /*Opening a pack burns the pack NT*/
+        if (!packContract.burnPack(_packId)) revert BurnPackFailed(); /*Opening a pack burns the pack NT*/
         _mintSongs(msg.sender, _currentIndex); /*Mint 4 songs to opener*/
     }
 
@@ -112,10 +123,39 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
     /// @param _to Recipient
     /// @param _amount Number of tokens to send
     // TODO distribute via a different contract?
-    function mintSupercharged(address _to, uint256 _amount) external onlyOwner {
+    function _mintSupercharged(address _to, uint256 _amount) internal {
         if ((totalSupply() + _amount > SUPERCHARGED_SUPPLY))
             revert MaxSupplyExceeded(); /*Revert if max supply exceeded*/
         _safeMint(_to, _amount); /*Batch mint*/
+    }
+
+    function mintSupercharged(address _to, uint256 _amount) external onlyOwner {
+        _mintSupercharged(_to, _amount);
+    }
+
+    function batchMintSupercharged(
+        address[] calldata _tos,
+        uint256[] calldata _amounts
+    ) external onlyOwner {
+        if (_tos.length != _amounts.length) revert LengthMismatch();
+        for (uint256 index = 0; index < _tos.length; index++) {
+            _mintSupercharged(_tos[index], _amounts[index]);
+        }
+    }
+
+    /// @notice Called with the sale price to determine how much royalty
+    //          is owed and to whom.
+    /// @param _tokenId - the NFT asset queried for royalty information
+    /// @param _value - the sale price of the NFT asset specified by _tokenId
+    /// @return _receiver - address of who should be sent the royalty payment
+    /// @return _royaltyAmount - the royalty payment amount for value sale price
+    function royaltyInfo(uint256 _tokenId, uint256 _value)
+        external
+        view
+        override(IERC2981Royalties)
+        returns (address _receiver, uint256 _royaltyAmount)
+    {
+        return (address(this), (_value * royaltyPoints) / 10000);
     }
 
     /*****************
@@ -131,7 +171,7 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
 
         superchargedOffset = _seed % SUPERCHARGED_SUPPLY; /*Mod seed by supply to get offset*/
-        
+
         if (superchargedOffset == 0) revert InvalidOffset();
 
         superchargedOffsetIsSet = true; /*Set offset so pack opening can begin and disable this function*/
@@ -219,8 +259,8 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
     /*****************
     CONFIG FUNCTIONS
     *****************/
-    
-    // TODO lock song contract address?
+
+    // TODO lock pack contract address?
     function setPackContract(address _packContract) external onlyOwner {
         packContract = ChaosPacks(_packContract);
     }
@@ -237,10 +277,24 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
         contractURI = _contractURI;
     }
 
+    /// @notice Set new base URI
+    /// @dev only possible before supercharged offset is set
+    /// @param baseURI_ String to prepend to token IDs
+    function setBaseURI(string memory baseURI_) external onlyOwner {
+        if (superchargedOffsetIsSet) revert SuperchargedOffsetAlreadySet();
+        _setBaseURI(baseURI_);
+    }
+
     /// @notice Set distributorFee as owner
     /// @param _distributorFee 0xSplits distributorFee payable to third parties covering gas of distribution
     function setDistributorFee(uint32 _distributorFee) external onlyOwner {
         distributorFee = _distributorFee;
+    }
+
+    /// @notice Set royalty points
+    /// @param _royaltyPoints Royalty percentage / 10000
+    function setRoyaltyPoints(uint256 _royaltyPoints) external onlyOwner {
+        royaltyPoints = _royaltyPoints;
     }
 
     function tokenURI(uint256 tokenId)
@@ -273,9 +327,9 @@ contract ChaosSongs is ERC721ABurnable, Ownable, BatchShuffle {
         if (startTokenId < SUPERCHARGED_SUPPLY) {
             require(to != address(0)); /*Disallow burning of supercharged tokens*/
             if (from != address(0)) {
-                superchargeBalances[from]--;
+                superchargeBalances[from] -= uint32(quantity);
             }
-            superchargeBalances[to]++;
+            superchargeBalances[to] += uint32(quantity);
         }
     }
 
