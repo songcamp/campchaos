@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "hardhat/console.sol";
-
 /// @title Offsets
 /// @notice
 /// @dev
 abstract contract BatchShuffle {
-    uint256 internal _batchSize;
-    uint256 internal _startShuffledId;
+    uint256 internal immutable _batchSize;
+    uint256 internal immutable _startShuffledId;
 
     mapping(uint256 => uint16) public availableIds;
     uint16 public availableCount;
@@ -45,6 +43,9 @@ abstract contract BatchShuffle {
         }
         // Set last value as swapped index
         availableIds[swapIndex] = lastId;
+
+        // wm: is there a missing step here? something like
+        /* availableIds[lastIndex] = newId; */
 
         availableCount--;
 

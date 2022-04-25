@@ -3,38 +3,39 @@ pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "./EIP712Allowlisting.sol";
 import "./external/erc721a/ERC721A.sol";
-
-// TODO erc721a
 
 /// @title Chaos Packs
 /// @notice
 /// @dev
 contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
-    uint256 constant MAX_PER_MINT = 20; /*Don't let people buy more than 20 per transaction*/
-    uint256 RESERVED; /*Max token ID for reserve*/
-    uint256 PRESALE_LIMIT; /*Max token ID for presale- set in constructor*/
-    uint256 PUBLIC_LIMIT; /*Max token ID - set in constructor*/
-    uint256 constant PRESALE_PRICE = 0.05 ether; /*Discount for qualified addresses*/
-    uint256 constant PUBLIC_PRICE = 0.1 ether; /*Public sale price*/
-
-    address public songContract;
-
+    using SafeTransferLib for address;
     using Strings for uint256;
 
-    string public contractURI; /*contractURI contract metadata json*/
-
-    address payable public ethSink; /*recipient for ETH*/
-
-    string public baseURI; /*baseURI_ String to prepend to token IDs*/
-
     // Track when presales and public sales are allowed
-    enum ContractState {
+    enum SaleState {
         Presale,
         Public
     }
-    mapping(ContractState => bool) public contractState;
+
+    // easily circumvented w a bot/smart contract, but maybe we don't care?
+    uint256 constant MAX_PER_MINT = 20; /*Don't let people buy more than 20 per transaction*/
+    uint256 constant PRESALE_PRICE = 0.05 ether; /*Discount for qualified addresses*/
+    uint256 constant PUBLIC_PRICE = 0.1 ether; /*Public sale price*/
+
+    // wm: maybe not want to capitalize immutables
+    uint256 immutable RESERVED; /*Max token ID for reserve*/
+    uint256 immutable PRESALE_LIMIT; /*Max token ID for presale- set in constructor*/
+    uint256 immutable PUBLIC_LIMIT; /*Max token ID - set in constructor*/
+
+    address public songContract;
+    address payable public ethSink; /*recipient for ETH*/
+    string public contractURI; /*contractURI contract metadata json*/
+    string public baseURI; /*baseURI_ String to prepend to token IDs*/
+
+    SaleState public saleState;
 
     constructor(
         string memory baseURI_,
@@ -65,16 +66,18 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
         uint256 _nonce,
         bytes calldata _signature
     ) external payable requiresAllowlist(_signature, _nonce) {
-        require(contractState[ContractState.Presale], "!round");
         _purchase(msg.sender, _quantity, PRESALE_LIMIT, PRESALE_PRICE);
+        require(saleState == SaleState.Presale, "Pre-sale has ended");
+
     }
 
     /// @notice Mint pack by anyone
     /// @dev Public sale state must be enabled
     /// @param _quantity How many tokens to buy - up to 20 at a time
     function mintOpensale(uint256 _quantity) external payable {
-        require(contractState[ContractState.Public], "!round");
         _purchase(msg.sender, _quantity, PUBLIC_LIMIT, PUBLIC_PRICE);
+        require(saleState == SaleState.Public, "Mint in pre-sale");
+
     }
 
     /// @notice Mint special reserve by owner
@@ -88,6 +91,8 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
         require(msg.sender == songContract);
         _burn(_packId);
         return true;
+        // wm: looks like 721a emits transfer to address(0) already on burn
+        // https://github.com/chiru-labs/ERC721A/blob/main/contracts/ERC721A.sol#L555
         // TODO event
     }
 
@@ -99,6 +104,7 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
     ///      - Msg value is checked in comparison to price and quantity
     ///      - Quantity is checked in comparison to max per mint
     ///      - Quantity is checked in comparison to max supply
+    /// @param _to Address to mint tokens to
     /// @param _quantity How many tokens to mint
     /// @param _limit Limit for tokenIDs
     /// @param _price Price per token
@@ -110,10 +116,12 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
     ) internal {
         require((totalSupply() + _quantity) <= _limit, "EXCEEDS CAP"); /*Check max new token ID compared to total cap*/
         require(_quantity <= MAX_PER_MINT, "TOO MUCH"); /*Check requested qty vs max*/
-        require(msg.value >= _price * _quantity, "NOT ENOUGH"); /*Check if enough ETH sent*/
+        require(msg.value == _price * _quantity, "INCORRECT VALUE"); /*Check if correct ETH sent*/
 
-        (bool _success, ) = ethSink.call{value: msg.value}(""); /*Send ETH to sink first*/
-        require(_success, "could not send");
+        // wm: do we want to push on every purchase vs bulk pushing at end?
+        // how much gas do we save by bulk-pushing?
+        /*Send ETH to sink first*/
+        ethSink.safeTransferETH(msg.value);
 
         _safeMint(_to, _quantity);
     }
@@ -122,21 +130,22 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
     CONFIG FUNCTIONS
     *****************/
 
-    /// @notice Set states enabled or disabled as owner
+    /// @notice Set state of sale as owner
     /// @param _state 0: presale, 1: public sale
-    /// @param _enabled specified state on or off
-    function setContractState(ContractState _state, bool _enabled)
+    function setSaleState(SaleState _state)
         external
         onlyOwner
     {
-        contractState[_state] = _enabled;
+        saleState = _state;
     }
 
+    // wm: could make immutable if we deploy song contract first
     // TODO lock song contract address?
     function setSongContract(address _songContract) external onlyOwner {
         songContract = _songContract;
     }
 
+    // wm: do we need a separate fn for this?
     /// @notice internal helper to update token URI
     /// @param baseURI_ String to prepend to token IDs
     function _setBaseURI(string memory baseURI_) internal {
@@ -150,7 +159,7 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
     }
 
     function tokenURI(uint256 tokenId)
-        public
+        external
         view
         override
         returns (string memory)
@@ -165,8 +174,8 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
                 ? string(abi.encodePacked(baseURI, tokenId.toString(), ".json"))
                 : "";
     }
-    
-    ///@dev Support interfaces for Access Control 
+
+    ///@dev Support interfaces for Access Control
     function supportsInterface(bytes4 interfaceId)
         public
         view
