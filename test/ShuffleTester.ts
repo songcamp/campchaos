@@ -65,6 +65,14 @@ describe("Shuffle Tester", function () {
                 "Sold out"
             );
         });
+        
+        it("Depletes available count to 0", async function() {
+            for (let index = 0; index < 20; index++) {
+                await shuffleTester.setRandomOffset(index);
+            }
+            expect(await shuffleTester.availableCount).to.equal(0)
+            
+        })
 
         it("Does not repeat offsets", async function () {
             const counter: { [key: number]: number } = {};

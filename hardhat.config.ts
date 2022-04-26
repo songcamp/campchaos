@@ -15,6 +15,7 @@ import "./tasks/accounts";
 import "./tasks/balance";
 import "./tasks/block-number";
 import "./tasks/create-collectibles";
+import "./tasks/generate-dna";
 
 const MAINNET_RPC_URL =
     process.env.MAINNET_RPC_URL ||

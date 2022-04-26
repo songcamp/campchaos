@@ -55,7 +55,8 @@
         "tslint-plugin-prettier": "^2.3.0",
         "typechain": "^6.0.5",
         "typescript": "^4.5.3",
-        "web3": "^1.6.1"
+        "web3": "^1.6.1",
+        "random-weighted-choice": "^0.1.4"
     },
     "mocha": {
         "timeout": 10000000

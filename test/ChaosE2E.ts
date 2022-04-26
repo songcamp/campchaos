@@ -23,7 +23,7 @@ const config = {
 };
 
 
-describe.skip("Chaos E2E", function () {
+describe("Chaos E2E", function () {
     let accounts: SignerWithAddress[];
     let chaosSongs: ChaosSongs;
     let packContract: ChaosPacks;
@@ -85,8 +85,8 @@ describe.skip("Chaos E2E", function () {
     it("Should offset the token IDs", async function () {
         await packContract.mintReserve(5000, accounts[0].address)
         expect(await packContract.balanceOf(accounts[0].address)).to.equal(5000);
-        for (let index = 0; index < 5000; index++) {
-            const tx = await chaosSongs.openPack(index + 1);
+        for (let index = 1; index <= 5000; index++) {
+            const tx = await chaosSongs.openPack(index);
             const receipt = await tx.wait();
             const gasUsed = receipt.gasUsed;
             console.log({ index, gasUsed });
