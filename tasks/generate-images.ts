@@ -13,37 +13,85 @@ const description = "Chaos";
 // the id of the nft will be added to this url, in the example e.g. https://hashlips/nft/1 for NFT with id 1
 const baseImageUri = "Placeholder";
 
-const dir = __dirname;
-
-const coverPath = (params: {
+type pathParams = {
     act: string;
-    format: string;
     scene: string;
-    color: string;
-}) =>
-    `${params.act}_${params.format}_scene_${params.scene}_dist1_color${params.color}.png`;
-const formatPath = (params: {
-    act: string;
+    bg: string;
     format: string;
-    scene: string;
-    color: string;
-}) =>
-    `${params.act}_${params.format}_master_scene_${params.scene}_color${params.color}.png`;
-const logoPath = (params: {
-    act: string;
-    format: string;
+    formatColor: string;
+    coverColor: string;
     logo: string;
-    color: string;
-}) =>
-    `${params.act}_${params.format}_master_logo_${params.logo}_color${params.color}.png`;
-const ribbonsPath = (params: {
-    act: string;
-    format: string;
     ribbon: string;
-    color: string;
-}) =>
-    `${params.act}_${params.format}_master_ribbon${params.ribbon}_color${params.color}.png`;
-const bgPath = (params: { bg: string }) => `paper${params.bg}`;
+};
+const actPathNames = ["acti", "actii", "actiii"];
+
+const scenePathNames = [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13", //TODO alchemy
+    "14", //TODO alchemy
+    "15", //TODO alchemy
+    "16", //TODO hidden
+];
+
+const bgPathNames = [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6", // TODO SC
+];
+
+const formatPathNames = [
+    "vinyl",
+    "8track",
+    "cassette", // TODO CD?
+];
+
+const formatColorPathNames = ["1", "2", "3", "4", "5"];
+
+const coverColorPathNames = ["1", "2", "3", "4", "5"];
+
+const ribbonPathNames = ["1", "2", "3", "4", "5"];
+
+const logoPathNames = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+function dnaToPathParams(dna: number[]): pathParams {
+    const params = {
+        act: actPathNames[dna[0] - 1],
+        scene: scenePathNames[dna[1] - 1],
+        bg: bgPathNames[dna[2] - 1],
+        format: formatPathNames[dna[3] - 1],
+        formatColor: formatColorPathNames[dna[4] - 1],
+        coverColor: coverColorPathNames[dna[5] - 1],
+        logo: logoPathNames[dna[6] - 1],
+        ribbon: ribbonPathNames[dna[7] - 1],
+    };
+    // console.log({params, actPathNames, dna})
+    return params;
+}
+
+const coverPath = (params: pathParams) =>
+    `coverArt/${params.act}_${params.format}_scene_${params.scene}_dist1_color${params.coverColor}.png`;
+const formatPath = (params: pathParams) =>
+    `format/${params.act}_${params.format}_master_scene_${params.scene}_color${params.formatColor}.png`;
+const logoPath = (params: pathParams) =>
+    `logos/${params.act}_${params.format}_master_logo_${params.logo}_color${params.formatColor}.png`;
+const ribbonsPath = (params: pathParams) =>
+    `ribbons/${params.act}_${params.format}_master_ribbon${params.ribbon}_color${params.formatColor}.png`;
+const bgPath = (params: pathParams) => `backgrounds/paper${params.bg}`;
+const nullPath = (params: pathParams) => null;
 
 const formatNames = ["Vinyl", "8track", "Casette"];
 const coverNames = [
@@ -72,7 +120,13 @@ const logoNames = [
     "Logo 8",
     "Logo 9",
 ];
-const ribbonNames = ["1", "2", "3", "4", "5"];
+const ribbonNames = [
+    "Ribbon 1",
+    "Ribbon 2",
+    "Ribbon 3",
+    "Ribbon 4",
+    "Ribbon 5",
+];
 const backgroundNames = [
     "Off White",
     "Egg Shell",
@@ -84,21 +138,19 @@ const backgroundNames = [
 
 const addLayer = (
     _name: string,
-    _path: ((params: any) => string) | null,
+    _path: (params: any) => string | null,
     _names: string[],
     _traitType: string,
     _position: { x: number; y: number },
     _size: { width: number; height: number }
 ) => {
-    // add two different dimension for elements:
-    // - all elements with their path information
-    // - only the ids mapped to their rarity
     let elements = [];
     for (let index = 0; index < _names.length; index++) {
         const _element = {
             id: index,
             name: _names[index],
-            path: _path,
+            path: null,
+            pathGenerator: _path,
             traitType: _traitType,
         };
         elements.push(_element);
@@ -126,7 +178,8 @@ type Layer = {
     elements: {
         id: number;
         name: string;
-        path: ((params: any) => string) | null;
+        path: string | null;
+        pathGenerator: (params: any) => string | null;
         traitType: string;
     }[];
 };
@@ -140,12 +193,7 @@ type ConstructedLayer = {
         width: number;
         height: number;
     };
-    selectedElement: {
-        id?: number | undefined;
-        name?: string | undefined;
-        path?: ((params: any) => string) | null | undefined;
-        traitType?: string | undefined;
-    };
+    selectedElement: any;
 };
 
 const getAttributeForElement = (_element: {
@@ -193,8 +241,9 @@ const loadLayerImg = async (
     _layer: ConstructedLayer
 ): Promise<{ layer: ConstructedLayer; loadedImage: any }> => {
     return new Promise(async (resolve) => {
-      // TODO construct path
-        const image = await loadImage(`${_layer.selectedElement.path}`);
+        console.log(`Loading ${_layer.selectedElement.path}`);
+        // const image = await loadImage(`${_layer.selectedElement.path}`);
+        const image = "";
         resolve({ layer: _layer, loadedImage: image });
     });
 };
@@ -226,6 +275,7 @@ const saveMetadata = (_folder: string, _metadata: any) => {
 task("generate-images", "Generates chaos images")
     .addParam("output", "The folder to store the output")
     .addParam("dna", "DNA to use")
+    .addParam("inputfolder", "Folder with all content")
     .addParam("start", "Edition ID to start from")
     .addParam("end", "Edition ID to end on")
     .addParam("size", "Edition size")
@@ -250,7 +300,7 @@ task("generate-images", "Generates chaos images")
                 position,
                 size
             ),
-            addLayer("Format", null, formatNames, "Format", position, size),
+            addLayer("Format", nullPath, formatNames, "Format", position, size),
             addLayer(
                 "FormatColor",
                 formatPath,
@@ -284,6 +334,12 @@ task("generate-images", "Generates chaos images")
                 let selectedElement = layer.elements.find(
                     (element) => element.id === _dna[dnaIndex]
                 );
+                const pathParams = dnaToPathParams(_dna);
+                if (selectedElement) {
+                    selectedElement.path =
+                        taskArgs.inputfolder +
+                        selectedElement.pathGenerator(pathParams);
+                }
                 return {
                     position: layer.position,
                     size: layer.size,
@@ -352,19 +408,19 @@ task("generate-images", "Generates chaos images")
 
                 // draw each layer
                 elementArray.forEach((element) => {
-                    drawElement(element);
+                    // drawElement(element);
                     attributesList.push(getAttributeForElement(element));
                 });
                 // add an image signature as the edition count to the top left of the image
                 // signImage(`#${editionCount}`)
                 // write the image to the output directory
-                saveImage(taskArgs.output, index, canvas.toBuffer("image/png"));
+                // saveImage(taskArgs.output, index, canvas.toBuffer("image/png"));
                 let nftMetadata = generateMetadata(
                     newDna,
                     index,
                     attributesList
                 );
-                saveMetadata(taskArgs.folder, nftMetadata);
+                saveMetadata(taskArgs.output, nftMetadata);
                 metadataList.push(nftMetadata);
                 console.log("- metadata: " + JSON.stringify(nftMetadata));
                 console.log("- edition " + index + " created.");

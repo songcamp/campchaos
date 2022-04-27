@@ -35,6 +35,14 @@ const coverartTable = [
     { weight: 800, id: 5 },
 ];
 
+const ribbonTable = [
+    { weight: 9000, id: 1 },
+    { weight: 6000, id: 2 },
+    { weight: 4200, id: 3 },
+    { weight: 1000, id: 4 },
+    { weight: 800, id: 5 },
+];
+
 const logoTable = [
     { weight: 5800, id: 1 },
     { weight: 5793, id: 2 },
@@ -80,6 +88,7 @@ const rarityTables = [
     colorTable,
     coverartTable,
     logoTable,
+    ribbonTable,
 ];
 
 const createDna = (
