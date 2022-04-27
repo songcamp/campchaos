@@ -3,167 +3,25 @@ import { createCanvas, loadImage } from "canvas";
 import { task } from "hardhat/config";
 import fs from "fs";
 
-// image width in pixels
-const width = 1000;
-// image height in pixels
-const height = 1000;
-// description for NFT in metadata file
-const description = "Chaos";
-// base url to use in metadata file
-// the id of the nft will be added to this url, in the example e.g. https://hashlips/nft/1 for NFT with id 1
-const baseImageUri = "Placeholder";
-
-type pathParams = {
-    act: string;
-    scene: string;
-    bg: string;
-    format: string;
-    formatColor: string;
-    coverColor: string;
-    logo: string;
-    ribbon: string;
-};
-const actPathNames = ["acti", "actii", "actiii"];
-
-const scenePathNames = [
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11",
-    "12",
-    "13", //TODO alchemy
-    "14", //TODO alchemy
-    "15", //TODO alchemy
-    "16", //TODO hidden
-];
-
-const bgPathNames = [
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6", // TODO SC
-];
-
-const formatPathNames = [
-    "vinyl",
-    "8track",
-    "cassette", // TODO CD?
-];
-
-const formatColorPathNames = ["1", "2", "3", "4", "5"];
-
-const coverColorPathNames = ["1", "2", "3", "4", "5"];
-
-const ribbonPathNames = ["1", "2", "3", "4", "5"];
-
-const logoPathNames = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
-
-function dnaToPathParams(dna: number[]): pathParams {
-    const params = {
-        act: actPathNames[dna[0] - 1],
-        scene: scenePathNames[dna[1] - 1],
-        bg: bgPathNames[dna[2] - 1],
-        format: formatPathNames[dna[3] - 1],
-        formatColor: formatColorPathNames[dna[4] - 1],
-        coverColor: coverColorPathNames[dna[5] - 1],
-        logo: logoPathNames[dna[6] - 1],
-        ribbon: ribbonPathNames[dna[7] - 1],
-    };
-    // console.log({params, actPathNames, dna})
-    return params;
-}
-
-const coverPath = (params: pathParams) =>
-    `coverArt/${params.act}_${params.format}_scene_${params.scene}_dist1_color${params.coverColor}.png`;
-const formatPath = (params: pathParams) =>
-    `format/${params.act}_${params.format}_master_scene_${params.scene}_color${params.formatColor}.png`;
-const logoPath = (params: pathParams) =>
-    `logos/${params.act}_${params.format}_master_logo_${params.logo}_color${params.formatColor}.png`;
-const ribbonsPath = (params: pathParams) =>
-    `ribbons/${params.act}_${params.format}_master_ribbon${params.ribbon}_color${params.formatColor}.png`;
-const bgPath = (params: pathParams) => `backgrounds/paper${params.bg}`;
-const nullPath = (params: pathParams) => null;
-
-const formatNames = ["Vinyl", "8track", "Casette"];
-const coverNames = [
-    "Cover Art Color 1",
-    "Cover Art Color 2",
-    "Cover Art Color 3",
-    "Cover Art Color 4",
-    "Cover Art Color 5",
-];
-const formatColorNames = [
-    "Color 1",
-    "Color 2",
-    "Color 3",
-    "Color 4",
-    "Color 5",
-    "Supercharged", // todo not how sc works
-];
-const logoNames = [
-    "Logo 1",
-    "Logo 2",
-    "Logo 3",
-    "Logo 4",
-    "Logo 5",
-    "Logo 6",
-    "Logo 7",
-    "Logo 8",
-    "Logo 9",
-];
-const ribbonNames = [
-    "Ribbon 1",
-    "Ribbon 2",
-    "Ribbon 3",
-    "Ribbon 4",
-    "Ribbon 5",
-];
-const backgroundNames = [
-    "Off White",
-    "Egg Shell",
-    "Water Stained",
-    "Creased",
-    "Chaos",
-    "Supercharged",
-];
-
-const addLayer = (
-    _name: string,
-    _path: (params: any) => string | null,
-    _names: string[],
-    _traitType: string,
-    _position: { x: number; y: number },
-    _size: { width: number; height: number }
-) => {
-    let elements = [];
-    for (let index = 0; index < _names.length; index++) {
-        const _element = {
-            id: index,
-            name: _names[index],
-            path: null,
-            pathGenerator: _path,
-            traitType: _traitType,
-        };
-        elements.push(_element);
-    }
-
-    let elementsForLayer = {
-        name: _name,
-        position: _position,
-        size: _size,
-        elements,
-    };
-    return elementsForLayer;
-};
+import {
+    width,
+    height,
+    description,
+    baseImageUri,
+    nullPath,
+    backgroundNames,
+    bgPath,
+    coverNames,
+    coverPath,
+    dnaToPathParams,
+    formatColorNames,
+    formatNames,
+    formatPath,
+    logoNames,
+    logoPath,
+    ribbonNames,
+    ribbonsPath,
+} from "./config";
 
 type Layer = {
     name: string;
@@ -196,6 +54,46 @@ type ConstructedLayer = {
     selectedElement: any;
 };
 
+type Metadata = {
+    name: string;
+    description: string;
+    image: string;
+    attributes: {
+        trait_type: string;
+        value: string;
+    }[];
+    edition: number;
+};
+
+const addLayer = (
+    _name: string,
+    _path: (params: any) => string | null,
+    _names: string[],
+    _traitType: string,
+    _position: { x: number; y: number },
+    _size: { width: number; height: number }
+) => {
+    let elements = [];
+    for (let index = 0; index < _names.length; index++) {
+        const _element = {
+            id: index,
+            name: _names[index],
+            path: null,
+            pathGenerator: _path,
+            traitType: _traitType,
+        };
+        elements.push(_element);
+    }
+
+    let elementsForLayer = {
+        name: _name,
+        position: _position,
+        size: _size,
+        elements,
+    };
+    return elementsForLayer;
+};
+
 const getAttributeForElement = (_element: {
     layer: ConstructedLayer;
     loadedImage: any;
@@ -209,17 +107,6 @@ const getAttributeForElement = (_element: {
         value: selectedElement.name || "",
     };
     return attribute;
-};
-
-type Metadata = {
-    name: string;
-    description: string;
-    image: string;
-    attributes: {
-        trait_type: string;
-        value: string;
-    }[];
-    edition: number;
 };
 
 const generateMetadata = (
@@ -254,6 +141,26 @@ const loadEmptyLayer = async (
     return new Promise(async (resolve) => {
         resolve({ layer: _layer, loadedImage: undefined });
     });
+};
+
+const constructLayer = (_folder: string, _dna: number[], _layers: Layer[]) => {
+    let mappedDnaToLayers = _layers.map((layer, index) => {
+        let dnaIndex = index;
+        let selectedElement = layer.elements.find(
+            (element) => element.id === _dna[dnaIndex]
+        );
+        const pathParams = dnaToPathParams(_dna);
+        if (selectedElement) {
+            selectedElement.path =
+                _folder + selectedElement.pathGenerator(pathParams);
+        }
+        return {
+            position: layer.position,
+            size: layer.size,
+            selectedElement: { ...selectedElement },
+        };
+    });
+    return mappedDnaToLayers;
 };
 
 const writeMetaData = (output: string, _data: string) => {
@@ -328,27 +235,6 @@ task("generate-images", "Generates chaos images")
             ),
         ];
 
-        const constructLayer = (_dna: number[], _layers: Layer[]) => {
-            let mappedDnaToLayers = _layers.map((layer, index) => {
-                let dnaIndex = index;
-                let selectedElement = layer.elements.find(
-                    (element) => element.id === _dna[dnaIndex]
-                );
-                const pathParams = dnaToPathParams(_dna);
-                if (selectedElement) {
-                    selectedElement.path =
-                        taskArgs.inputfolder +
-                        selectedElement.pathGenerator(pathParams);
-                }
-                return {
-                    position: layer.position,
-                    size: layer.size,
-                    selectedElement: { ...selectedElement },
-                };
-            });
-            return mappedDnaToLayers;
-        };
-
         const canvas = createCanvas(width, height);
         const ctx = canvas.getContext("2d");
         const drawElement = (_element: {
@@ -382,7 +268,7 @@ task("generate-images", "Generates chaos images")
 
             // propagate information about required layer contained within config into a mapping object
             // = prepare for drawing
-            let results = constructLayer(newDna, layers);
+            let results = constructLayer(taskArgs.inputfolder, newDna, layers);
             let loadedElements: Promise<{
                 layer: ConstructedLayer;
                 loadedImage: any;
