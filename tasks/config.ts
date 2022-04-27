@@ -13,47 +13,16 @@ type pathParams = {
 export const width = 1000;
 // image height in pixels
 export const height = 1000;
+
+/* 
+METADATA NAMES
+*/
+
 // description for NFT in metadata file
 export const description = "Chaos";
 // base url to use in metadata file
 // the id of the nft will be added to this url, in the example e.g. https://hashlips/nft/1 for NFT with id 1
 export const baseImageUri = "Placeholder";
-
-export const actPathNames = ["acti", "actii", "actiii"];
-
-export const scenePathNames = [
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11",
-    "12",
-    "13", //TODO alchemy
-    "14", //TODO alchemy
-    "15", //TODO alchemy
-    "16", //TODO hidden
-];
-
-export const bgPathNames = [
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6", // TODO SC
-];
-
-export const formatPathNames = [
-    "vinyl",
-    "8track",
-    "cassette", // TODO CD?
-];
 
 export const formatNames = ["Vinyl", "8track", "Casette"];
 export const coverNames = [
@@ -98,6 +67,27 @@ export const backgroundNames = [
     "Supercharged",
 ];
 
+export const actPathNames = ["acti", "actii", "actiii"];
+
+export const scenePathNames = [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13", //TODO alchemy
+    "14", //TODO alchemy
+    "15", //TODO alchemy
+    "16", //TODO hidden
+];
+
 export const formatColorPathNames = ["1", "2", "3", "4", "5"];
 
 export const coverColorPathNames = ["1", "2", "3", "4", "5"];
@@ -105,6 +95,21 @@ export const coverColorPathNames = ["1", "2", "3", "4", "5"];
 export const ribbonPathNames = ["1", "2", "3", "4", "5"];
 
 export const logoPathNames = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+export const bgPathNames = [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6", // TODO SC
+];
+
+export const formatPathNames = [
+    "vinyl",
+    "8track",
+    "cassette", // TODO CD?
+];
 
 export function dnaToPathParams(dna: number[]): pathParams {
     const params = {
@@ -131,3 +136,95 @@ export const ribbonsPath = (params: pathParams) =>
     `ribbons/${params.act}_${params.format}_master_ribbon${params.ribbon}_color${params.formatColor}.png`;
 export const bgPath = (params: pathParams) => `backgrounds/paper${params.bg}`;
 export const nullPath = (params: pathParams) => null;
+
+/*
+  RARITY CONFIGURATION
+*/
+
+const backgroundTable = [
+    { weight: 8000, id: 1 },
+    { weight: 5000, id: 2 },
+    { weight: 3000, id: 3 },
+    { weight: 2500, id: 4 },
+    { weight: 1500, id: 5 },
+    { weight: 1000, id: 6 },
+];
+
+const formatTable = [
+    { weight: 2500, id: 1 },
+    { weight: 7000, id: 2 },
+    { weight: 11500, id: 3 },
+];
+
+const colorTable = [
+    { weight: 16000, id: 1 },
+    { weight: 2000, id: 2 },
+    { weight: 1100, id: 3 },
+    { weight: 775, id: 4 },
+    { weight: 125, id: 5 },
+    { weight: 1000, id: 6 },
+];
+
+const coverartTable = [
+    { weight: 9000, id: 1 },
+    { weight: 6000, id: 2 },
+    { weight: 4200, id: 3 },
+    { weight: 1000, id: 4 },
+    { weight: 800, id: 5 },
+];
+
+const ribbonTable = [
+    { weight: 9000, id: 1 },
+    { weight: 6000, id: 2 },
+    { weight: 4200, id: 3 },
+    { weight: 1000, id: 4 },
+    { weight: 800, id: 5 },
+];
+
+const logoTable = [
+    { weight: 5800, id: 1 },
+    { weight: 5793, id: 2 },
+    { weight: 4000, id: 3 },
+    { weight: 2000, id: 4 },
+    { weight: 1888, id: 5 },
+    { weight: 1200, id: 6 },
+    { weight: 222, id: 7 },
+    { weight: 88, id: 8 },
+    { weight: 9, id: 9 },
+];
+
+const actTable = [
+    { weight: 9000, id: 1 },
+    { weight: 7000, id: 2 },
+    { weight: 5000, id: 3 },
+];
+
+const sceneTable = [
+    { weight: 1687, id: 1 },
+    { weight: 1687, id: 2 },
+    { weight: 1687, id: 3 },
+    { weight: 1687, id: 4 },
+    { weight: 1687, id: 5 },
+    { weight: 1687, id: 6 },
+    { weight: 1687, id: 7 },
+    { weight: 1687, id: 8 },
+    { weight: 1687, id: 9 },
+    { weight: 1687, id: 10 },
+    { weight: 1687, id: 11 },
+    { weight: 1687, id: 12 },
+    { weight: 250, id: 13 },
+    { weight: 250, id: 14 },
+    { weight: 250, id: 15 },
+    { weight: 6, id: 16 },
+];
+
+export const rarityTables = [
+    actTable,
+    sceneTable,
+    backgroundTable,
+    formatTable,
+    colorTable,
+    coverartTable,
+    logoTable,
+    ribbonTable,
+];
