@@ -29,11 +29,15 @@ contract ChaosSongs is
     BatchShuffle,
     IERC2981Royalties
 {
+    using SafeTransferLib for address;
+    using Strings for uint256;
+
     uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
     uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
     uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
     uint16 constant PACK_SUPPLY = 5e3; /*Supply of packs determines number of offsets*/
 
+    // wm: so 10_000 = 100% correct?
     uint256 public royaltyPoints; /*Royalty percentage / 10000*/
 
     uint256 public superchargedOffset; /*Track offset for first 1000 NFTs separately*/
@@ -41,14 +45,12 @@ contract ChaosSongs is
     ChaosPacks public packContract; /*External contract to use for pack NFTs*/
 
     /*Liquid splits config*/
-    using SafeTransferLib for address payable;
-    mapping(address => uint32) public superchargeBalances; /*Track supercharged balance separately for liquid splits*/
-    address payable public payoutSplit; /* 0xSplits address for split */
-    ISplitMain public splitMain; /* 0xSplits address for updating & distributing split */
+    ISplitMain public immutable splitMain; /* 0xSplits address for updating & distributing split */
+    address payable public immutable payoutSplit; /* 0xSplits address for split */
     uint32 public distributorFee; /* 0xSplits distributorFee payable to third parties covering gas of distribution */
+    mapping(address => uint32) public superchargeBalances; /*Track supercharged balance separately for liquid splits*/
 
     /*Contract config*/
-    using Strings for uint256;
     string public contractURI; /*contractURI contract metadata json*/
     string public baseURI; /*baseURI_ String to prepend to token IDs*/
 
@@ -156,7 +158,7 @@ contract ChaosSongs is
     /*****************
     RNG Config
     *****************/
-    /// @notice Set the offset using on chain entropy for the resere minted tokens
+    /// @notice Set the offset using on chain entropy for the reserve minted tokens
     /// @dev Should be done AFTER distribution, BEFORE pack opening
     ///     In rare case that offset is 0, allow owner to rerun
     function setSuperchargedOffset() external onlyOwner {
@@ -168,6 +170,7 @@ contract ChaosSongs is
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
 
         superchargedOffset = _seed % SUPERCHARGED_SUPPLY; /*Mod seed by supply to get offset*/
+        revert(superchargedOffset != 0, "TRY AGAIN");
     }
 
     /*****************
@@ -185,12 +188,7 @@ contract ChaosSongs is
         } else {
             /*If supercharged use the supercharged offset*/
             if (superchargedOffset == 0) revert SuperchargedOffsetNotSet(); /*Require that offset is set for this to return*/
-            _shuffledTokenId = superchargedOffset + _tokenId; /*Supercharged offset is same for all tokens*/
-
-            /*Check if exceeds max supply*/
-            if (_shuffledTokenId >= SUPERCHARGED_SUPPLY) {
-                _shuffledTokenId -= SUPERCHARGED_SUPPLY; /*Roll over to beginning*/
-            }
+            _shuffledTokenId = ( superchargedOffset + _tokenId ) % SUPERCHARGED_SUPPLY; /*Supercharged offset is same for all tokens*/
         }
 
         return _shuffledTokenId;
@@ -205,9 +203,10 @@ contract ChaosSongs is
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
         uint256 _offset = _getNextOffset(_seed);
 
+        // wm: wonder if this line should be moved into _getNextOffset & then the fn renamed?
         offsets[_offsetIndex] = _offset;
     }
-    
+
     /// @dev Mint the supercharged tokens to proper destination - internal utility
     /// @param _to Recipient
     /// @param _amount Number of tokens to send
@@ -221,6 +220,7 @@ contract ChaosSongs is
     DISTRIBUTION FUNCTIONS
     *****************/
 
+    // wm: do we need to extend this to distribute erc20s too?
     /// @notice distributes ETH to supercharged NFT holders
     /// @param accounts Ordered, unique list of supercharged NFT tokenholders
     /// @param distributorAddress Address to receive distributorFee
@@ -231,11 +231,9 @@ contract ChaosSongs is
         uint256 numRecipients = accounts.length;
         uint32[] memory percentAllocations = new uint32[](numRecipients);
         for (uint256 i = 0; i < numRecipients; ) {
-            // TODO (wm): ideally could access balances directly to save gas
-            // for this use case, the require check against the zero address is irrelevant & adds gas
             percentAllocations[i] =
                 superchargeBalances[accounts[i]] *
-                SUPERCHARGED_SUPPLY;
+                SUPERCHARGED_SUPPLY; // * 1e6 / 1e3 = * 1e3
             unchecked {
                 ++i;
             }
@@ -249,12 +247,8 @@ contract ChaosSongs is
             accounts,
             percentAllocations,
             distributorFee,
-            // TODO (wm): should distributorAddress have a fallback?
-            // tx.origin or msg.sender if === Address(0)?
             distributorAddress
         );
-
-        // TODO (wm): emit event?
     }
 
     /*****************
