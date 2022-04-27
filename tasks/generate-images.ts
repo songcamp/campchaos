@@ -115,7 +115,7 @@ const generateMetadata = (
     _attributesList: { trait_type: string; value: string }[]
 ) => {
     let tempMetadata = {
-        name: `Song #${_edition}`,
+        name: `Chaos #${_edition}`,
         description: description,
         image: `${baseImageUri}/${_edition}.png`,
         attributes: _attributesList,

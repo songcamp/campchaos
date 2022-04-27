@@ -228,3 +228,5 @@ export const rarityTables = [
     logoTable,
     ribbonTable,
 ];
+
+2-7-3-3-1-2-5-1
