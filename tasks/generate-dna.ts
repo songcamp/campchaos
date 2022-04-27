@@ -73,13 +73,13 @@ const sceneTable = [
 ];
 
 const rarityTables = [
+    actTable,
+    sceneTable,
     backgroundTable,
     formatTable,
     colorTable,
     coverartTable,
     logoTable,
-    actTable,
-    sceneTable,
 ];
 
 const createDna = (
@@ -98,8 +98,8 @@ const createDna = (
     return randNum;
 };
 
-const writeMetaData = (_data: string) => {
-    fs.writeFileSync("./output/specialDna.json", _data);
+const writeMetaData = (output: string, _data: string) => {
+    fs.writeFileSync(output, _data);
 };
 
 const isDnaUnique = (_DnaList: number[][], _dna : number[]) => {
@@ -110,7 +110,7 @@ const isDnaUnique = (_DnaList: number[][], _dna : number[]) => {
 task("generate-dna", "Generates chaos DNA")
     .addParam("output", "The folder to store the output")
     .addParam("start", "Edition ID to start from")
-    .addParam("size", "Edition ID to start from")
+    .addParam("size", "Edition size")
     .setAction(async (taskArgs, { web3 }) => {
         console.log("##################");
         console.log("# Generative Art");
@@ -121,18 +121,13 @@ task("generate-dna", "Generates chaos DNA")
         console.log("start creating NFTs.");
 
         // clear meta data from previous run
-        writeMetaData("");
+        writeMetaData(taskArgs.output, "");
 
         let editionCount = taskArgs.start;
         let editionSize = taskArgs.size;
         let allDna: {[key: string]: number[]} = {};
         let dnaList = [];
         while (editionCount <= editionSize) {
-            // console.log('-----------------')
-            // console.log('creating NFT %d of %d', editionCount, editionSize)
-
-            // calculate the NFT dna by getting a random part for each layer/feature
-            // based on the ones available for the given rarity to use during generation
             let newDna = createDna(rarityTables);
             while (!isDnaUnique(dnaList, newDna)) {
                 // recalculate dna as this has been used before.
@@ -150,7 +145,7 @@ task("generate-dna", "Generates chaos DNA")
             dnaList.push(newDna);
             editionCount++;
         }
-        writeMetaData(JSON.stringify(allDna));
+        writeMetaData(taskArgs.output, JSON.stringify(allDna));
     });
 
 export default {
