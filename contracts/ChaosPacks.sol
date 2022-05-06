@@ -3,138 +3,135 @@ pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "./EIP712Allowlisting.sol";
 import "./external/erc721a/ERC721A.sol";
 
-// TODO erc721a
+error OnlyOneCallPerBlockForNonEOA();
+error SaleDisabled();
+error MaxSupplyExceeded();
+error MaxReserveExceeded();
+error MaxPerTxExceeded();
+error InvalidPurchaseValue();
+error OnlySongContractCanBurn();
 
 /// @title Chaos Packs
-/// @notice
-/// @dev
-contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
-    uint256 constant MAX_PER_MINT = 20; /*Don't let people buy more than 20 per transaction*/
+/// @notice Sale contract for Songcamp Chaos Packs
+contract ChaosPacks is ERC721A, Ownable {
+    uint256 constant MAX_PER_MINT = 5; /*Don't let people buy more than 5 per transaction*/
     uint256 RESERVED; /*Max token ID for reserve*/
-    uint256 PRESALE_LIMIT; /*Max token ID for presale- set in constructor*/
-    uint256 PUBLIC_LIMIT; /*Max token ID - set in constructor*/
-    uint256 constant PRESALE_PRICE = 0.05 ether; /*Discount for qualified addresses*/
-    uint256 constant PUBLIC_PRICE = 0.1 ether; /*Public sale price*/
+    uint256 MAX_SUPPLY; /*Max token ID - set in constructor*/
+    uint256 constant public PRICE = 0.2 ether; /*Public sale price*/
 
-    address public songContract;
+    address public songContract; /*Address that can burn packs to open them*/
 
     using Strings for uint256;
 
     string public contractURI; /*contractURI contract metadata json*/
 
     address payable public ethSink; /*recipient for ETH*/
-
     string public baseURI; /*baseURI_ String to prepend to token IDs*/
 
-    // Track when presales and public sales are allowed
-    enum ContractState {
-        Presale,
-        Public
-    }
-    mapping(ContractState => bool) public contractState;
+    bool public saleEnabled; /*Sale disabled by default*/
 
+    mapping(address => uint256) lastCallFrom; /*Track last call to prevent contract bots*/
+
+    modifier oncePerBlock() {
+        if (msg.sender != tx.origin) {
+            /*If caller is a contract only allow one call per block*/
+            if (lastCallFrom[tx.origin] == block.number) {
+                revert OnlyOneCallPerBlockForNonEOA();
+            }
+            lastCallFrom[tx.origin] = block.number; /*Store block to check on next mint*/
+        }
+        _;
+    }
+
+    /// @notice Constructor sets contract metadata configurations and sale configurations
+    /// @param baseURI_ Base URI for token metadata
+    /// @param _contractURI URI for marketplace contract metadata
+    /// @param _reserved Max amount that can be minted by admin
+    /// @param _maxSupply Max amount that can be minted total
+    /// @param _sink Destination for sale ETH
     constructor(
         string memory baseURI_,
         string memory _contractURI,
         uint256 _reserved,
-        uint256 _presaleLimit,
-        uint256 _publicSaleLimit,
+        uint256 _maxSupply,
         address payable _sink
-    ) ERC721A("Song Camp Chaos Packs", "SCCP") EIP712Allowlisting("SongPacks") {
-        ethSink = _sink;
-        contractURI = _contractURI;
-        _setBaseURI(baseURI_);
+    ) ERC721A("Chaos Packs", "PACKS") {
+        ethSink = _sink; /*Set the ETH destination - should be immutable split*/
+        contractURI = _contractURI; /*Set contract metadata*/
+        _setBaseURI(baseURI_); /*Set token metadata*/
 
-        RESERVED = _reserved;
-        PRESALE_LIMIT = _presaleLimit;
-        PUBLIC_LIMIT = _publicSaleLimit;
-
+        RESERVED = _reserved; /*Set max admin mint*/
+        MAX_SUPPLY = _maxSupply; /*Set max total mint*/
     }
 
     /*****************
     EXTERNAL MINTING FUNCTIONS
     *****************/
-    /// @notice Mint presale by qualified address.
-    /// @dev Presale state must be enabled
-    /// @param _quantity How many tokens to buy - up to 20 at a time
-    function mintPresale(
-        uint256 _quantity,
-        uint256 _nonce,
-        bytes calldata _signature
-    ) external payable requiresAllowlist(_signature, _nonce) {
-        require(contractState[ContractState.Presale], "!round");
-        _purchase(msg.sender, _quantity, PRESALE_LIMIT, PRESALE_PRICE);
-    }
-
     /// @notice Mint pack by anyone
-    /// @dev Public sale state must be enabled
-    /// @param _quantity How many tokens to buy - up to 20 at a time
-    function mintOpensale(uint256 _quantity) external payable {
-        require(contractState[ContractState.Public], "!round");
-        _purchase(msg.sender, _quantity, PUBLIC_LIMIT, PUBLIC_PRICE);
+    /// @dev Sale state must be enabled
+    /// @param _quantity How many tokens to buy - up to 5 at a time
+    function purchase(uint256 _quantity) external payable oncePerBlock {
+        if (!saleEnabled) revert SaleDisabled(); /*Sale must be enabled*/
+        if (msg.value != (PRICE * _quantity)) revert InvalidPurchaseValue(); /*Purchase price must be exact*/
+        if ((totalSupply() + _quantity) > MAX_SUPPLY)
+            revert MaxSupplyExceeded(); /*Check against max supply*/
+        if (_quantity > MAX_PER_MINT) revert MaxPerTxExceeded(); /*Check against max per mint*/
+
+        (bool _success, ) = ethSink.call{value: msg.value}(""); /*Send ETH to sink first*/
+        require(_success, "could not send");
+
+        _safeMint(msg.sender, _quantity); /*Mint packs to sender*/
     }
 
     /// @notice Mint special reserve by owner
     /// @param _quantity How many tokens to mint
     function mintReserve(uint256 _quantity, address _to) external onlyOwner {
-        require((totalSupply() + _quantity) <= RESERVED, "EXCEEDS CAP");
-        _safeMint(_to, _quantity);
-    }
-
-    function burnPack(uint256 _packId) external returns (bool){
-        require(msg.sender == songContract);
-        _burn(_packId);
-        return true;
-        // TODO event
+        if ((totalSupply() + _quantity) > RESERVED) revert MaxReserveExceeded(); /*Check against max admin mint*/
+        if ((totalSupply() + _quantity) > MAX_SUPPLY)
+            /*Check against max supply*/
+            revert MaxSupplyExceeded();
+        _safeMint(_to, _quantity); /*Mint packs to specified destination*/
     }
 
     /*****************
-    INTERNAL MINTING FUNCTIONS AND HELPERS
+    PACK OPENING
     *****************/
-    /// @notice Mint tokens and transfer eth to sink
-    /// @dev Validations:
-    ///      - Msg value is checked in comparison to price and quantity
-    ///      - Quantity is checked in comparison to max per mint
-    ///      - Quantity is checked in comparison to max supply
-    /// @param _quantity How many tokens to mint
-    /// @param _limit Limit for tokenIDs
-    /// @param _price Price per token
-    function _purchase(
-        address _to,
-        uint256 _quantity,
-        uint256 _limit,
-        uint256 _price
-    ) internal {
-        require((totalSupply() + _quantity) <= _limit, "EXCEEDS CAP"); /*Check max new token ID compared to total cap*/
-        require(_quantity <= MAX_PER_MINT, "TOO MUCH"); /*Check requested qty vs max*/
-        require(msg.value >= _price * _quantity, "NOT ENOUGH"); /*Check if enough ETH sent*/
-
-        (bool _success, ) = ethSink.call{value: msg.value}(""); /*Send ETH to sink first*/
-        require(_success, "could not send");
-
-        _safeMint(_to, _quantity);
+    /// @notice Burn pack by song contract
+    /// @param _packId Which pack to burn
+    function burnPack(uint256 _packId) external returns (bool) {
+        if (msg.sender != songContract) revert OnlySongContractCanBurn(); /*Packs can only be burned by opening in song contract*/
+        _burn(_packId); /*Burn the pack*/
+        return true;
     }
 
     /*****************
     CONFIG FUNCTIONS
     *****************/
+    /// @notice Set sale proceeds address
+    /// @param _sink new sink
+    function setSink(address payable _sink) external onlyOwner {
+        ethSink = _sink;
+    }
 
     /// @notice Set states enabled or disabled as owner
-    /// @param _state 0: presale, 1: public sale
     /// @param _enabled specified state on or off
-    function setContractState(ContractState _state, bool _enabled)
-        external
-        onlyOwner
-    {
-        contractState[_state] = _enabled;
+    function setSaleEnabled(bool _enabled) external onlyOwner {
+        saleEnabled = _enabled;
     }
 
     // TODO lock song contract address?
+    /// @notice Set song contract as owner
+    /// @param _songContract Song contract address
     function setSongContract(address _songContract) external onlyOwner {
         songContract = _songContract;
+    }
+
+    /// @notice Set new base URI
+    /// @param baseURI_ String to prepend to token IDs
+    function setBaseURI(string memory baseURI_) external onlyOwner {
+        _setBaseURI(baseURI_);
     }
 
     /// @notice internal helper to update token URI
@@ -155,28 +152,11 @@ contract ChaosPacks is ERC721A, EIP712Allowlisting, Ownable {
         override
         returns (string memory)
     {
-        require(
-            _exists(tokenId),
-            "ERC721Metadata: URI query for nonexistent token"
-        );
+        if (!_exists(tokenId)) revert URIQueryForNonexistentToken();
 
         return
             bytes(baseURI).length > 0
                 ? string(abi.encodePacked(baseURI, tokenId.toString(), ".json"))
                 : "";
     }
-    
-    ///@dev Support interfaces for Access Control 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(AccessControl, ERC721A)
-        returns (bool)
-    {
-        return
-            interfaceId == type(IAccessControl).interfaceId ||
-            interfaceId == type(IERC721).interfaceId ||
-            super.supportsInterface(interfaceId);
-    }
-
 }

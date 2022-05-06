@@ -18,6 +18,7 @@ const config = {
     supercharged: 1000,
     distributorFee: 0,
     recipient: "0xd1ed25240ecfa47fD2d46D34584c91935c89546c",
+    royalties: 1000,
 };
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -56,7 +57,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
             config.contractUri,
             5000,
             5000,
-            5000,
             accounts[0].address
         );
         
@@ -70,6 +70,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
             config.baseUri,
             config.contractUri,
             splitContract.address,
+            config.royalties,
             config.distributorFee
         );
         
@@ -90,7 +91,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         
         await tx4.wait()
         
-        const tx5 = await packContract.setContractState(1, true)
+        const tx5 = await packContract.setSaleEnabled(true)
         await tx5.wait()
         
         console.log({

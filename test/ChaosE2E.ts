@@ -58,7 +58,6 @@ describe("Chaos E2E", function () {
             config.contractUri,
             5000,
             5000,
-            5000,
             accounts[0].address
         );
 

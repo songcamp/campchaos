@@ -10,8 +10,6 @@ import "./external/erc721a/extensions/ERC721ABurnable.sol";
 import "./BatchShuffle.sol";
 import "./Royalties/ERC2981/IERC2981Royalties.sol";
 
-
-error MaxSupplyExceeded();
 error CallerIsNotTokenOwner();
 error PacksDisabledUntilSuperchargedComplete();
 error SuperchargedOffsetAlreadySet();
@@ -31,7 +29,6 @@ contract ChaosSongs is
 {
     uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
     uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
-    uint256 constant MAX_SUPPLY = 21e3; /* Max token ID for both supercharged and regular*/
     uint16 constant PACK_SUPPLY = 5e3; /*Supply of packs determines number of offsets*/
 
     uint256 public royaltyPoints; /*Royalty percentage / 10000*/
@@ -52,6 +49,8 @@ contract ChaosSongs is
     string public contractURI; /*contractURI contract metadata json*/
     string public baseURI; /*baseURI_ String to prepend to token IDs*/
 
+    event PackOpened(uint256 _id, address _opener);
+
     /// @notice Constructor sets contract metadata configurations and split interfaces
     /// @param baseURI_ Base URI for token metadata
     /// @param _contractURI URI for marketplace contract metadata
@@ -64,7 +63,7 @@ contract ChaosSongs is
         uint256 _royaltyPoints,
         uint32 _distributorFee
     )
-        ERC721A("Song Camp Chaos Songs", "SCCS")
+        ERC721A("Chaos Songs", "SONGS")
         BatchShuffle(PACK_SUPPLY, SONG_COUNT, SUPERCHARGED_SUPPLY)
     {
         _setBaseURI(baseURI_); /*Set token level metadata*/
@@ -111,6 +110,8 @@ contract ChaosSongs is
 
         if (!packContract.burnPack(_packId)) revert BurnPackFailed(); /*Opening a pack burns the pack NT*/
         _mintSongs(msg.sender, _currentIndex); /*Mint 4 songs to opener*/
+
+        emit PackOpened(_packId, msg.sender);
     }
 
     /*****************
@@ -207,7 +208,7 @@ contract ChaosSongs is
 
         offsets[_offsetIndex] = _offset;
     }
-    
+
     /// @dev Mint the supercharged tokens to proper destination - internal utility
     /// @param _to Recipient
     /// @param _amount Number of tokens to send
@@ -307,7 +308,7 @@ contract ChaosSongs is
         override
         returns (string memory)
     {
-        require(_exists(tokenId), "URIQueryForNonexistentToken()");
+        if (!_exists(tokenId)) revert URIQueryForNonexistentToken();
         uint256 _shuffled = getSongTokenId(tokenId);
 
         return
