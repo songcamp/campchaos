@@ -2,7 +2,7 @@ import "@nomiclabs/hardhat-web3";
 import { task } from "hardhat/config";
 import fs from "fs";
 import rwc from "random-weighted-choice";
-import { rarityTables } from "./config";
+import { applyOverrides, rarityTables } from "./config";
 
 const createDna = (
     _rarityTables: {
@@ -17,6 +17,7 @@ const createDna = (
         const chosenItem = rwc(_table);
         randNum.push(parseInt(chosenItem));
     });
+    randNum = applyOverrides(randNum)
     return randNum;
 };
 

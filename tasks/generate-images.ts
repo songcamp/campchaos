@@ -21,6 +21,12 @@ import {
     logoPath,
     ribbonNames,
     ribbonsPath,
+    paperPath,
+    paperNames,
+    actNames,
+    sceneNames,
+    logoColorNames,
+    ribbonColorNames,
 } from "./config";
 
 type Layer = {
@@ -199,6 +205,16 @@ task("generate-images", "Generates chaos images")
         const size = { width, height };
 
         const layers = [
+            addLayer("Act", nullPath, actNames, "Act", position, size),
+            addLayer("Scene", nullPath, sceneNames, "Act", position, size),
+            addLayer(
+                "Paper",
+                paperPath,
+                paperNames,
+                "Paper",
+                position,
+                size
+            ),
             addLayer(
                 "Backgrounds",
                 bgPath,
@@ -225,6 +241,7 @@ task("generate-images", "Generates chaos images")
                 size
             ),
             addLayer("Logo", logoPath, logoNames, "Logo", position, size),
+            addLayer("Logo Color", nullPath, logoColorNames, "Logo Color", position, size),
             addLayer(
                 "Ribbons",
                 ribbonsPath,
@@ -233,6 +250,8 @@ task("generate-images", "Generates chaos images")
                 position,
                 size
             ),
+            addLayer("Ribbon Color", nullPath, ribbonColorNames, "Ribbon Color", position, size),
+            // TODO handle when there is not ribbon. Combine metadata for ribbon color and ribbon, logo color & logo
         ];
 
         const canvas = createCanvas(width, height);
