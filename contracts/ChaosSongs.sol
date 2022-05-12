@@ -27,8 +27,11 @@ contract ChaosSongs is
     BatchShuffle,
     IERC2981Royalties
 {
+    using SafeTransferLib for address payable;
+    using Strings for uint256;
+
     uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
-    uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* 1e6 / 1e3, where 1e3 is the supply of supercharged NFTs */
+    uint32 constant SUPERCHARGED_SUPPLY = 1e3; /* Number of supercharged songs*/
     uint16 constant PACK_SUPPLY = 5e3; /*Supply of packs determines number of offsets*/
 
     uint256 public royaltyPoints; /*Royalty percentage / 10000*/
@@ -38,14 +41,12 @@ contract ChaosSongs is
     ChaosPacks public packContract; /*External contract to use for pack NFTs*/
 
     /*Liquid splits config*/
-    using SafeTransferLib for address payable;
-    mapping(address => uint32) public superchargeBalances; /*Track supercharged balance separately for liquid splits*/
-    address payable public payoutSplit; /* 0xSplits address for split */
+    address payable public immutable payoutSplit; /* 0xSplits address for split */
     ISplitMain public splitMain; /* 0xSplits address for updating & distributing split */
     uint32 public distributorFee; /* 0xSplits distributorFee payable to third parties covering gas of distribution */
+    mapping(address => uint32) public superchargeBalances; /*Track supercharged balance separately for liquid splits*/
 
     /*Contract config*/
-    using Strings for uint256;
     string public contractURI; /*contractURI contract metadata json*/
     string public baseURI; /*baseURI_ String to prepend to token IDs*/
 
@@ -157,9 +158,9 @@ contract ChaosSongs is
     /*****************
     RNG Config
     *****************/
-    /// @notice Set the offset using on chain entropy for the resere minted tokens
+    /// @notice Set the offset using on chain entropy for the reserve minted tokens
     /// @dev Should be done AFTER distribution, BEFORE pack opening
-    ///     In rare case that offset is 0, allow owner to rerun
+    ///     In rare case that offset is 0, fail transaction and allow owner to rerun
     function setSuperchargedOffset() external onlyOwner {
         if (superchargedOffset != 0) revert SuperchargedOffsetAlreadySet(); /*Can only be set once*/
         if (totalSupply() != SUPERCHARGED_SUPPLY)
@@ -169,6 +170,7 @@ contract ChaosSongs is
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
 
         superchargedOffset = _seed % SUPERCHARGED_SUPPLY; /*Mod seed by supply to get offset*/
+        if (superchargedOffset == 0) revert InvalidOffset(); /*Fail the transaction if we get 0*/
     }
 
     /*****************
@@ -186,12 +188,9 @@ contract ChaosSongs is
         } else {
             /*If supercharged use the supercharged offset*/
             if (superchargedOffset == 0) revert SuperchargedOffsetNotSet(); /*Require that offset is set for this to return*/
-            _shuffledTokenId = superchargedOffset + _tokenId; /*Supercharged offset is same for all tokens*/
-
-            /*Check if exceeds max supply*/
-            if (_shuffledTokenId >= SUPERCHARGED_SUPPLY) {
-                _shuffledTokenId -= SUPERCHARGED_SUPPLY; /*Roll over to beginning*/
-            }
+            _shuffledTokenId =
+                (superchargedOffset + _tokenId) %
+                SUPERCHARGED_SUPPLY; /*Supercharged offset is same for all tokens*/
         }
 
         return _shuffledTokenId;
@@ -204,9 +203,7 @@ contract ChaosSongs is
         _safeMint(_to, SONG_COUNT);
 
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
-        uint256 _offset = _getNextOffset(_seed);
-
-        offsets[_offsetIndex] = _offset;
+        _setNextOffset(_offsetIndex, _seed);
     }
 
     /// @dev Mint the supercharged tokens to proper destination - internal utility
@@ -232,10 +229,8 @@ contract ChaosSongs is
         uint256 numRecipients = accounts.length;
         uint32[] memory percentAllocations = new uint32[](numRecipients);
         for (uint256 i = 0; i < numRecipients; ) {
-            // TODO (wm): ideally could access balances directly to save gas
-            // for this use case, the require check against the zero address is irrelevant & adds gas
             percentAllocations[i] =
-                superchargeBalances[accounts[i]] *
+                (superchargeBalances[accounts[i]] * 1e6) /
                 SUPERCHARGED_SUPPLY;
             unchecked {
                 ++i;
@@ -250,12 +245,8 @@ contract ChaosSongs is
             accounts,
             percentAllocations,
             distributorFee,
-            // TODO (wm): should distributorAddress have a fallback?
-            // tx.origin or msg.sender if === Address(0)?
             distributorAddress
         );
-
-        // TODO (wm): emit event?
     }
 
     /*****************

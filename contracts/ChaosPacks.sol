@@ -3,6 +3,7 @@ pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "./external/erc721a/ERC721A.sol";
 
 error OnlyOneCallPerBlockForNonEOA();
@@ -16,14 +17,15 @@ error OnlySongContractCanBurn();
 /// @title Chaos Packs
 /// @notice Sale contract for Songcamp Chaos Packs
 contract ChaosPacks is ERC721A, Ownable {
+    using SafeTransferLib for address payable;
+    using Strings for uint256;
+
     uint256 constant MAX_PER_MINT = 5; /*Don't let people buy more than 5 per transaction*/
-    uint256 RESERVED; /*Max token ID for reserve*/
-    uint256 MAX_SUPPLY; /*Max token ID - set in constructor*/
-    uint256 constant public PRICE = 0.2 ether; /*Public sale price*/
+    uint256 immutable reserved; /*Max amount for reserve*/
+    uint256 immutable maxSupply; /*Max token ID - set in constructor*/
+    uint256 public constant PRICE = 0.2 ether; /*Public sale price*/
 
     address public songContract; /*Address that can burn packs to open them*/
-
-    using Strings for uint256;
 
     string public contractURI; /*contractURI contract metadata json*/
 
@@ -60,10 +62,10 @@ contract ChaosPacks is ERC721A, Ownable {
     ) ERC721A("Chaos Packs", "PACKS") {
         ethSink = _sink; /*Set the ETH destination - should be immutable split*/
         contractURI = _contractURI; /*Set contract metadata*/
-        _setBaseURI(baseURI_); /*Set token metadata*/
+        baseURI = baseURI_; /*Set token metadata*/
 
-        RESERVED = _reserved; /*Set max admin mint*/
-        MAX_SUPPLY = _maxSupply; /*Set max total mint*/
+        reserved = _reserved; /*Set max admin mint*/
+        maxSupply = _maxSupply; /*Set max total mint*/
     }
 
     /*****************
@@ -75,21 +77,21 @@ contract ChaosPacks is ERC721A, Ownable {
     function purchase(uint256 _quantity) external payable oncePerBlock {
         if (!saleEnabled) revert SaleDisabled(); /*Sale must be enabled*/
         if (msg.value != (PRICE * _quantity)) revert InvalidPurchaseValue(); /*Purchase price must be exact*/
-        if ((totalSupply() + _quantity) > MAX_SUPPLY)
-            revert MaxSupplyExceeded(); /*Check against max supply*/
+        if ((totalSupply() + _quantity) > maxSupply) revert MaxSupplyExceeded(); /*Check against max supply*/
         if (_quantity > MAX_PER_MINT) revert MaxPerTxExceeded(); /*Check against max per mint*/
 
-        (bool _success, ) = ethSink.call{value: msg.value}(""); /*Send ETH to sink first*/
-        require(_success, "could not send");
+        ethSink.safeTransferETH(msg.value);
 
         _safeMint(msg.sender, _quantity); /*Mint packs to sender*/
     }
 
     /// @notice Mint special reserve by owner
+    /// @param _to Address to mint tokens to
     /// @param _quantity How many tokens to mint
     function mintReserve(uint256 _quantity, address _to) external onlyOwner {
-        if ((totalSupply() + _quantity) > RESERVED) revert MaxReserveExceeded(); /*Check against max admin mint*/
-        if ((totalSupply() + _quantity) > MAX_SUPPLY)
+        // TODO is this the right dynamic?
+        if ((totalSupply() + _quantity) > reserved) revert MaxReserveExceeded(); /*Check against max admin mint*/
+        if ((totalSupply() + _quantity) > maxSupply)
             /*Check against max supply*/
             revert MaxSupplyExceeded();
         _safeMint(_to, _quantity); /*Mint packs to specified destination*/
@@ -131,12 +133,6 @@ contract ChaosPacks is ERC721A, Ownable {
     /// @notice Set new base URI
     /// @param baseURI_ String to prepend to token IDs
     function setBaseURI(string memory baseURI_) external onlyOwner {
-        _setBaseURI(baseURI_);
-    }
-
-    /// @notice internal helper to update token URI
-    /// @param baseURI_ String to prepend to token IDs
-    function _setBaseURI(string memory baseURI_) internal {
         baseURI = baseURI_;
     }
 

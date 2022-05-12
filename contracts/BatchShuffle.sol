@@ -7,8 +7,8 @@ import "hardhat/console.sol";
 /// @notice
 /// @dev
 abstract contract BatchShuffle {
-    uint256 internal _batchSize;
-    uint256 internal _startShuffledId;
+    uint256 internal immutable _batchSize;
+    uint256 internal immutable _startShuffledId;
 
     mapping(uint256 => uint16) public availableIds;
     uint16 public availableCount;
@@ -25,7 +25,7 @@ abstract contract BatchShuffle {
         _startShuffledId = startShuffledId_;
     }
 
-    function _getNextOffset(uint256 _seed) internal returns (uint256) {
+    function _setNextOffset(uint256 _index, uint256 _seed) internal {
         require(availableCount > 0, "Sold out");
         // This updates the entropy base for minting. Fairly simple but should work for this use case.
         // uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
@@ -48,7 +48,7 @@ abstract contract BatchShuffle {
 
         availableCount--;
 
-        return newId;
+        offsets[_index] = newId;
     }
 
     /// @dev Get the token ID to use for URI of a token ID

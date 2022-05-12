@@ -68,7 +68,6 @@ type Metadata = {
         trait_type: string;
         value: string;
     }[];
-    edition: number;
 };
 
 const addLayer = (
@@ -125,7 +124,6 @@ const generateMetadata = (
         description: description,
         image: `${baseImageUri}/${_edition}.png`,
         attributes: _attributesList,
-        edition: _edition,
     };
     return tempMetadata;
 };

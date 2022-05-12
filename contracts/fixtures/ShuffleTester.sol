@@ -14,15 +14,12 @@ contract ShuffleTester is BatchShuffle {
         offsets[_offsetIndex] = _offset;
     }
 
-    function setOffsetSeed(
-        uint256 _offsetIndex,
-        uint256 _seed
-    ) public {
-        offsets[_offsetIndex] = _getNextOffset(_seed);
+    function setOffsetSeed(uint256 _offsetIndex, uint256 _seed) public {
+        _setNextOffset(_offsetIndex, _seed);
     }
 
     function setRandomOffset(uint256 _offsetIndex) public {
         uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
-        offsets[_offsetIndex] = _getNextOffset(_seed);
+        _setNextOffset(_offsetIndex, _seed);
     }
 }

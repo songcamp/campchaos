@@ -15,7 +15,7 @@ function countOccurences(arrIn: number[]) {
     return out;
 }
 
-describe("Shuffle Tester", function () {
+describe.only("Shuffle Tester", function () {
     let accounts: SignerWithAddress[];
     let shuffleTester: ShuffleTester;
 
@@ -70,7 +70,7 @@ describe("Shuffle Tester", function () {
             for (let index = 0; index < 20; index++) {
                 await shuffleTester.setRandomOffset(index);
             }
-            expect(await shuffleTester.availableCount).to.equal(0)
+            expect(await shuffleTester.availableCount()).to.equal(0)
             
         })
 

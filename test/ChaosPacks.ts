@@ -44,15 +44,6 @@ describe.only("Chaos Packs", function () {
         await nftTokenContract.setSongContract(config.songAddress);
     });
 
-    it("Should allow reserve minting", async function () {
-        await nftTokenContract.mintReserve(
-            5,
-            "0xd1ed25240ecfa47fD2d46D34584c91935c89546c"
-        );
-        expect(await nftTokenContract.ownerOf(0)).to.equal(
-            "0xd1ed25240ecfa47fD2d46D34584c91935c89546c"
-        );
-    });
     describe("Configuration", function () {
         it("Should setup tests", async function () {
             expect(await nftTokenContract.saleEnabled()).to.be.equal(false);
@@ -71,9 +62,9 @@ describe.only("Chaos Packs", function () {
             await nftTokenContract.setSaleEnabled(true);
             await nftTokenContract.setSink(nonReceiver.address);
 
-            expect(
+            await expect(
                 nftTokenContract.purchase(1, { value: price })
-            ).to.be.revertedWith("could not send");
+            ).to.be.revertedWith("ETH_TRANSFER_FAILED");
         });
 
         it("Should send eth to the sink", async function () {
@@ -100,13 +91,13 @@ describe.only("Chaos Packs", function () {
 
         it("Fails if public sale not enabled", async function () {
             await nftTokenContract.setSaleEnabled(false);
-            expect(
+            await expect(
                 nftTokenContract.purchase(1, { value: price })
-            ).to.be.revertedWith("!round");
+            ).to.be.revertedWith("SaleDisabled()");
         });
 
         it("Should fail if eth less than required amount", async function () {
-            expect(
+            await expect(
                 nftTokenContract.purchase(1, {
                     value: ethers.utils.parseEther("0.09"),
                 })
@@ -156,8 +147,9 @@ describe.only("Chaos Packs", function () {
             ).to.equal(1);
         });
 
-        it("Does not allow anyone else ot mint reserve", async function () {
-            expect(
+        it("Does not allow anyone else to mint reserve", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1])
+            await expect(
                 nftTokenContract.mintReserve(1, accounts[1].address)
             ).to.be.revertedWith("Ownable: caller is not the owner");
         });
@@ -170,7 +162,7 @@ describe.only("Chaos Packs", function () {
         });
 
         it("Should not allow owner to mint more than reserve cap", async function () {
-            expect(
+            await expect(
                 nftTokenContract.mintReserve(11, accounts[0].address)
             ).to.be.revertedWith("MaxReserveExceeded()");
         });
@@ -180,8 +172,8 @@ describe.only("Chaos Packs", function () {
             for (let index = 0; index < 19; index++) {
                 await nftTokenContract.purchase(5, { value: price.mul(5) });
             }
-            expect(
-                nftTokenContract.mintReserve(6, accounts[0].address)
+            await expect(
+                nftTokenContract.mintReserve(2, accounts[0].address)
             ).to.be.revertedWith("MaxSupplyExceeded()");
         });
     });
