@@ -28,6 +28,7 @@ contract ChaosSongs is
     IERC2981Royalties
 {
     using SafeTransferLib for address payable;
+    using SafeTransferLib for ERC20;
     using Strings for uint256;
 
     uint256 constant SONG_COUNT = 4; /* Number of songs minted on pack open*/
@@ -242,6 +243,38 @@ contract ChaosSongs is
         payoutSplit.safeTransferETH(address(this).balance);
         splitMain.updateAndDistributeETH(
             payoutSplit,
+            accounts,
+            percentAllocations,
+            distributorFee,
+            distributorAddress
+        );
+    }
+
+    /// @notice distributes ERC20s to supercharged NFT holders
+    /// @param accounts Ordered, unique list of supercharged NFT tokenholders
+    /// @param distributorAddress Address to receive distributorFee
+    function distributeERC20(
+        address[] calldata accounts,
+        ERC20 token,
+        address distributorAddress
+    ) external {
+        uint256 numRecipients = accounts.length;
+        uint32[] memory percentAllocations = new uint32[](numRecipients);
+        for (uint256 i = 0; i < numRecipients; ) {
+            percentAllocations[i] =
+                (superchargeBalances[accounts[i]] * 1e6) /
+                SUPERCHARGED_SUPPLY;
+            unchecked {
+                ++i;
+            }
+        }
+
+        // atomically deposit funds into split, update recipients to reflect current supercharged NFT holders,
+        // and distribute
+        token.safeTransfer(payoutSplit, token.balanceOf(address(this)));
+        splitMain.updateAndDistributeERC20(
+            payoutSplit,
+            token,
             accounts,
             percentAllocations,
             distributorFee,
