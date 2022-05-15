@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import {SafeTransferLib} from "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "./external/erc721a/ERC721A.sol";
+import "./Royalties/ERC2981/IERC2981Royalties.sol";
 
 error OnlyOneCallPerBlockForNonEOA();
 error SaleDisabled();
@@ -16,16 +17,18 @@ error OnlySongContractCanBurn();
 
 /// @title Chaos Packs
 /// @notice Sale contract for Songcamp Chaos Packs
-contract ChaosPacks is ERC721A, Ownable {
+contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
     using SafeTransferLib for address payable;
     using Strings for uint256;
 
-    uint256 constant MAX_PER_MINT = 5; /*Don't let people buy more than 5 per transaction*/
+    uint256 constant MAX_PER_MINT = 100; /*Don't let people buy more than 5 per transaction*/
     uint256 immutable reserved; /*Max amount for reserve*/
     uint256 immutable maxSupply; /*Max token ID - set in constructor*/
     uint256 public constant PRICE = 0.2 ether; /*Public sale price*/
 
     address public songContract; /*Address that can burn packs to open them*/
+
+    uint256 public royaltyPoints; /*Royalty percentage / 10000*/
 
     string public contractURI; /*contractURI contract metadata json*/
 
@@ -47,6 +50,7 @@ contract ChaosPacks is ERC721A, Ownable {
         _;
     }
 
+    // TODO royalty points
     /// @notice Constructor sets contract metadata configurations and sale configurations
     /// @param baseURI_ Base URI for token metadata
     /// @param _contractURI URI for marketplace contract metadata
@@ -106,6 +110,21 @@ contract ChaosPacks is ERC721A, Ownable {
         if (msg.sender != songContract) revert OnlySongContractCanBurn(); /*Packs can only be burned by opening in song contract*/
         _burn(_packId); /*Burn the pack*/
         return true;
+    }
+
+    /// @notice Called with the sale price to determine how much royalty
+    //          is owed and to whom.
+    /// @param _tokenId - the NFT asset queried for royalty information
+    /// @param _value - the sale price of the NFT asset specified by _tokenId
+    /// @return _receiver - address of who should be sent the royalty payment
+    /// @return _royaltyAmount - the royalty payment amount for value sale price
+    function royaltyInfo(uint256 _tokenId, uint256 _value)
+        external
+        view
+        override(IERC2981Royalties)
+        returns (address _receiver, uint256 _royaltyAmount)
+    {
+        return (songContract, (_value * royaltyPoints) / 10000);
     }
 
     /*****************

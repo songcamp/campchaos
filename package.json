@@ -64,6 +64,7 @@
         "timeout": 10000000
     },
     "dependencies": {
+        "@fast-csv/parse": "^4.3.6",
         "@rari-capital/solmate": "^6.2.0",
         "hardhat-gas-reporter": "^1.0.8"
     }

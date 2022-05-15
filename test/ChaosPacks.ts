@@ -78,6 +78,18 @@ describe.only("Chaos Packs", function () {
         });
     });
 
+    describe("Royalties", function () {
+        it("Exposes 2981 interface to send royalties to contract", async function () {
+            const royalties = await nftTokenContract.royaltyInfo(
+                1,
+                ethers.utils.parseEther("10")
+            );
+            expect(royalties._receiver).to.equal(config.songAddress);
+            expect(royalties._royaltyAmount.eq(ethers.utils.parseEther("1"))).to
+                .be.true;
+        });
+    });
+
     describe("Minting Public", function () {
         this.beforeEach(async function () {
             await nftTokenContract.setSaleEnabled(true);

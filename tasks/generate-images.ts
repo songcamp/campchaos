@@ -27,6 +27,14 @@ import {
     sceneNames,
     logoColorNames,
     ribbonColorNames,
+    dnaToAttributeNames,
+    mp3Base,
+    waveBase,
+    superchargedBgPath,
+    superchargedBackgroundNames,
+    superchargedFormatPath,
+    superchargedCoverPath,
+    superchargedLogoPath,
 } from "./config";
 
 type Layer = {
@@ -99,17 +107,21 @@ const addLayer = (
     return elementsForLayer;
 };
 
-const getAttributeForElement = (_element: {
-    layer: ConstructedLayer;
-    loadedImage: any;
-}): {
+const getAttributeForElement = (
+    _element: {
+        layer: ConstructedLayer;
+        loadedImage: any;
+    },
+    _dna: number[]
+): {
     trait_type: string;
     value: string;
 } => {
     let selectedElement = _element.layer.selectedElement;
+    const attributeNames = dnaToAttributeNames(_dna);
     let attribute = {
         trait_type: selectedElement.traitType || "",
-        value: selectedElement.name || "",
+        value: attributeNames[selectedElement.traitType],
     };
     return attribute;
 };
@@ -117,13 +129,21 @@ const getAttributeForElement = (_element: {
 const generateMetadata = (
     _dna: number[],
     _edition: number,
-    _attributesList: { trait_type: string; value: string }[]
+    _attributesList: { trait_type: string; value: string }[],
+    _songs: { [key: string]: any }
 ) => {
     let tempMetadata = {
         name: `Chaos #${_edition}`,
-        description: description,
+        description: _songs[_dna[0]][_dna[1]]["Description"],
+        animation_url: encodeURI(
+            mp3Base + _songs[_dna[0]][_dna[1]]["Main Audio"]
+        ),
+        losslessAudio: encodeURI(
+            waveBase + _songs[_dna[0]][_dna[1]]["Lossless Audio"]
+        ),
         image: `${baseImageUri}/${_edition}.png`,
         attributes: _attributesList,
+        edition: _edition,
     };
     return tempMetadata;
 };
@@ -132,9 +152,13 @@ const loadLayerImg = async (
     _layer: ConstructedLayer
 ): Promise<{ layer: ConstructedLayer; loadedImage: any }> => {
     return new Promise(async (resolve) => {
-        console.log(`Loading ${_layer.selectedElement.path}`);
-        // const image = await loadImage(`${_layer.selectedElement.path}`);
-        const image = "";
+        // console.log(`Loading ${_layer.selectedElement.path}`);
+        let image;
+        try {
+            image = await loadImage(`${_layer.selectedElement.path}`);
+        } catch (error) {
+            console.log(`Failed to load image ${_layer.selectedElement.path}`);
+        }
         resolve({ layer: _layer, loadedImage: image });
     });
 };
@@ -167,6 +191,36 @@ const constructLayer = (_folder: string, _dna: number[], _layers: Layer[]) => {
     return mappedDnaToLayers;
 };
 
+const applyAdditionalMetadata = (
+    act: number,
+    scene: number,
+    attributes: { trait_type: string; value: string }[],
+    songData: { [key: string]: any }
+): { trait_type: string; value: string }[] => {
+    const attributeList = [
+        "Song Title",
+        "Album",
+        "Artist",
+        "Genre",
+        "House",
+        "Collaborators",
+        "Song Credits",
+        "BPM",
+        "Key",
+        "Release Date",
+        "Distributed by",
+        "Manifested by",
+        "Chaos Full Credits",
+    ];
+    attributeList.forEach((attr) =>
+        attributes.push({
+            trait_type: attr,
+            value: songData[act][scene][attr],
+        })
+    );
+    return attributes;
+};
+
 const writeMetaData = (output: string, _data: string) => {
     fs.writeFileSync(output, _data);
 };
@@ -186,10 +240,12 @@ const saveMetadata = (_folder: string, _metadata: any) => {
 task("generate-images", "Generates chaos images")
     .addParam("output", "The folder to store the output")
     .addParam("dna", "DNA to use")
+    .addParam("songs", "Song json")
     .addParam("inputfolder", "Folder with all content")
     .addParam("start", "Edition ID to start from")
     .addParam("end", "Edition ID to end on")
     .addParam("size", "Edition size")
+    .addParam("supercharged", "Is supercharged or not")
     .setAction(async (taskArgs, { web3 }) => {
         console.log("##################");
         console.log("# Generative Art");
@@ -199,24 +255,22 @@ task("generate-images", "Generates chaos images")
         console.log();
         console.log("start creating NFTs.");
 
+        const allSongsRaw = fs.readFileSync(taskArgs.songs, "utf8");
+        const allSongs = JSON.parse(allSongsRaw);
+
         const position = { x: 0, y: 0 };
         const size = { width, height };
 
         const layers = [
             addLayer("Act", nullPath, actNames, "Act", position, size),
-            addLayer("Scene", nullPath, sceneNames, "Act", position, size),
-            addLayer(
-                "Paper",
-                paperPath,
-                paperNames,
-                "Paper",
-                position,
-                size
-            ),
+            addLayer("Scene", nullPath, sceneNames, "Scene", position, size),
+            addLayer("Paper", paperPath, paperNames, "Paper", position, size),
             addLayer(
                 "Backgrounds",
-                bgPath,
-                backgroundNames,
+                taskArgs.supercharged ? superchargedBgPath : bgPath,
+                taskArgs.supercharged
+                    ? superchargedBackgroundNames
+                    : backgroundNames,
                 "Background",
                 position,
                 size
@@ -224,7 +278,7 @@ task("generate-images", "Generates chaos images")
             addLayer("Format", nullPath, formatNames, "Format", position, size),
             addLayer(
                 "FormatColor",
-                formatPath,
+                taskArgs.supercharged ? superchargedFormatPath : formatPath,
                 formatColorNames,
                 "Format Color",
                 position,
@@ -232,23 +286,28 @@ task("generate-images", "Generates chaos images")
             ),
             addLayer(
                 "CoverArt",
-                coverPath,
+                taskArgs.supercharged ? superchargedCoverPath : coverPath,
                 coverNames,
-                "Cover Art",
+                "Cover Art Color",
                 position,
                 size
             ),
-            addLayer("Logo", logoPath, logoNames, "Logo", position, size),
-            addLayer("Logo Color", nullPath, logoColorNames, "Logo Color", position, size),
+            addLayer(
+                "Logo",
+                taskArgs.supercharged ? superchargedLogoPath : logoPath,
+                logoNames,
+                "Logo",
+                position,
+                size
+            ),
             addLayer(
                 "Ribbons",
                 ribbonsPath,
                 ribbonNames,
-                "Ribbons",
+                "Ribbon",
                 position,
                 size
             ),
-            addLayer("Ribbon Color", nullPath, ribbonColorNames, "Ribbon Color", position, size),
             // TODO handle when there is not ribbon. Combine metadata for ribbon color and ribbon, logo color & logo
         ];
 
@@ -273,8 +332,7 @@ task("generate-images", "Generates chaos images")
         const allDna = JSON.parse(rawdata);
         let metadataList: Metadata[] = [];
 
-        for (let i = taskArgs.start; i <= taskArgs.end; i++) {
-            // index = fixList[i]
+        for (let i = taskArgs.start; i < taskArgs.end; i++) {
             const index = i;
             const newDna = allDna[index];
 
@@ -294,7 +352,13 @@ task("generate-images", "Generates chaos images")
             // load all images to be used by canvas
             results.forEach((layer) => {
                 // console.log({selected: layer.selectedElement})
-                if (layer.selectedElement.path !== null) {
+                if (
+                    layer.selectedElement.path !== null &&
+                    layer.selectedElement.path?.toLowerCase().indexOf("none") ==
+                        -1 &&
+                    layer.selectedElement.path?.toLowerCase().indexOf("null") ==
+                        -1
+                ) {
                     loadedElements.push(loadLayerImg(layer));
                 } else {
                     loadedElements.push(loadEmptyLayer(layer));
@@ -311,23 +375,34 @@ task("generate-images", "Generates chaos images")
 
                 // draw each layer
                 elementArray.forEach((element) => {
-                    // drawElement(element);
-                    attributesList.push(getAttributeForElement(element));
+                    drawElement(element);
+                    attributesList.push(
+                        getAttributeForElement(element, newDna)
+                    );
                 });
+
+                attributesList = applyAdditionalMetadata(
+                    newDna[0],
+                    newDna[1],
+                    attributesList,
+                    allSongs
+                );
+
                 // add an image signature as the edition count to the top left of the image
                 // signImage(`#${editionCount}`)
                 // write the image to the output directory
-                // saveImage(taskArgs.output, index, canvas.toBuffer("image/png"));
+                saveImage(taskArgs.output, index, canvas.toBuffer("image/png"));
                 let nftMetadata = generateMetadata(
                     newDna,
                     index,
-                    attributesList
+                    attributesList,
+                    allSongs
                 );
                 saveMetadata(taskArgs.output, nftMetadata);
                 metadataList.push(nftMetadata);
-                console.log("- metadata: " + JSON.stringify(nftMetadata));
-                console.log("- edition " + index + " created.");
-                console.log();
+                // console.log("- metadata: " + JSON.stringify(nftMetadata));
+                // console.log("- edition " + index + " created.");
+                // console.log();
             });
         }
         writeMetaData(
