@@ -22,7 +22,7 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
     using Strings for uint256;
 
     uint256 constant MAX_PER_MINT = 100; /*Don't let people buy more than 5 per transaction*/
-    uint256 immutable reserved; /*Max amount for reserve*/
+    uint256 reserved; /*Max amount for reserve*/
     uint256 immutable maxSupply; /*Max token ID - set in constructor*/
     uint256 public constant PRICE = 0.2 ether; /*Public sale price*/
 
@@ -57,11 +57,13 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
     /// @param _reserved Max amount that can be minted by admin
     /// @param _maxSupply Max amount that can be minted total
     /// @param _sink Destination for sale ETH
+    /// @param _royaltyPoints BP of royalties to send to song contract
     constructor(
         string memory baseURI_,
         string memory _contractURI,
         uint256 _reserved,
         uint256 _maxSupply,
+        uint256 _royaltyPoints,
         address payable _sink
     ) ERC721A("Chaos Packs", "PACKS") {
         ethSink = _sink; /*Set the ETH destination - should be immutable split*/
@@ -70,6 +72,8 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
 
         reserved = _reserved; /*Set max admin mint*/
         maxSupply = _maxSupply; /*Set max total mint*/
+
+        royaltyPoints = _royaltyPoints; /*Set royalty amount out of 10000*/
     }
 
     /*****************
@@ -84,20 +88,22 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
         if ((totalSupply() + _quantity) > maxSupply) revert MaxSupplyExceeded(); /*Check against max supply*/
         if (_quantity > MAX_PER_MINT) revert MaxPerTxExceeded(); /*Check against max per mint*/
 
-        ethSink.safeTransferETH(msg.value);
-
         _safeMint(msg.sender, _quantity); /*Mint packs to sender*/
+    }
+
+    function withdrawToSink() external onlyOwner {
+        ethSink.safeTransferETH(address(this).balance);
     }
 
     /// @notice Mint special reserve by owner
     /// @param _to Address to mint tokens to
     /// @param _quantity How many tokens to mint
     function mintReserve(uint256 _quantity, address _to) external onlyOwner {
-        // TODO is this the right dynamic?
-        if ((totalSupply() + _quantity) > reserved) revert MaxReserveExceeded(); /*Check against max admin mint*/
+        if (_quantity > reserved) revert MaxReserveExceeded(); /*Check against max admin mint*/
         if ((totalSupply() + _quantity) > maxSupply)
             /*Check against max supply*/
             revert MaxSupplyExceeded();
+        reserved -= _quantity; /*Decrement reserve*/
         _safeMint(_to, _quantity); /*Mint packs to specified destination*/
     }
 

@@ -3,15 +3,21 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { BaseProvider } from "@ethersproject/providers";
 
-import { ChaosPacks, ChaosPacks__factory, BatchMinter, BatchMinter__factory } from "../typechain";
+import {
+    ChaosPacks,
+    ChaosPacks__factory,
+    BatchMinter,
+    BatchMinter__factory,
+} from "../typechain";
 
 const config = {
     baseUri: "https://placeholder.com/",
     contractUri: "https://placeholder.com/contract.json",
     reserved: 10,
-    public: 100,
+    public: 150,
     sinkAddress: "0x000000000000000000000000000000000000dEaD",
     songAddress: "0x000000000000000000000000000000000000bEEF",
+    royalties: 1000,
 };
 
 describe.only("Chaos Packs", function () {
@@ -39,6 +45,7 @@ describe.only("Chaos Packs", function () {
             config.contractUri,
             config.reserved,
             config.public,
+            config.royalties,
             config.sinkAddress
         );
         await nftTokenContract.setSongContract(config.songAddress);
@@ -62,9 +69,11 @@ describe.only("Chaos Packs", function () {
             await nftTokenContract.setSaleEnabled(true);
             await nftTokenContract.setSink(nonReceiver.address);
 
-            await expect(
-                nftTokenContract.purchase(1, { value: price })
-            ).to.be.revertedWith("ETH_TRANSFER_FAILED");
+            await nftTokenContract.purchase(1, { value: price });
+
+            await expect(nftTokenContract.withdrawToSink()).to.be.revertedWith(
+                "ETH_TRANSFER_FAILED"
+            );
         });
 
         it("Should send eth to the sink", async function () {
@@ -72,6 +81,7 @@ describe.only("Chaos Packs", function () {
             await nftTokenContract.purchase(1, {
                 value: price,
             });
+            await nftTokenContract.withdrawToSink();
             const balanceAfter = await provider.getBalance(config.sinkAddress);
 
             expect(balanceAfter.sub(balanceBefore).eq(price)).to.be.true;
@@ -84,6 +94,7 @@ describe.only("Chaos Packs", function () {
                 1,
                 ethers.utils.parseEther("10")
             );
+
             expect(royalties._receiver).to.equal(config.songAddress);
             expect(royalties._royaltyAmount.eq(ethers.utils.parseEther("1"))).to
                 .be.true;
@@ -127,23 +138,22 @@ describe.only("Chaos Packs", function () {
             ).to.be.revertedWith("InvalidPurchaseValue()");
         });
 
-        it("Should fail if more than 5 attempted", async function () {
-            const totalPrice = price.mul(6);
+        it("Should fail if more than 100 attempted", async function () {
+            const totalPrice = price.mul(101);
 
             await expect(
-                nftTokenContract.purchase(6, { value: totalPrice })
+                nftTokenContract.purchase(101, { value: totalPrice })
             ).to.be.revertedWith("MaxPerTxExceeded()");
         });
 
         it("Should fail if more than total supply", async function () {
             nftTokenContract = await nftTokenContract.connect(accounts[3]);
-            for (let index = 0; index < 20; index++) {
-                await nftTokenContract.purchase(5, { value: price.mul(5) });
-            }
+            await nftTokenContract.purchase(100, { value: price.mul(100) });
+            await nftTokenContract.purchase(50, { value: price.mul(50) });
             expect(
                 await nftTokenContract.balanceOf(accounts[3].address)
-            ).to.equal(100);
-            expect(await nftTokenContract.totalSupply()).to.equal(100);
+            ).to.equal(150);
+            expect(await nftTokenContract.totalSupply()).to.equal(150);
             await expect(
                 nftTokenContract.purchase(1, { value: price })
             ).to.be.revertedWith("MaxSupplyExceeded()");
@@ -160,7 +170,7 @@ describe.only("Chaos Packs", function () {
         });
 
         it("Does not allow anyone else to mint reserve", async function () {
-            nftTokenContract = await nftTokenContract.connect(accounts[1])
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
             await expect(
                 nftTokenContract.mintReserve(1, accounts[1].address)
             ).to.be.revertedWith("Ownable: caller is not the owner");
@@ -180,10 +190,9 @@ describe.only("Chaos Packs", function () {
         });
 
         it("Should not allow owner to mint more than total supply", async function () {
-            await nftTokenContract.setSaleEnabled(true)
-            for (let index = 0; index < 19; index++) {
-                await nftTokenContract.purchase(5, { value: price.mul(5) });
-            }
+            await nftTokenContract.setSaleEnabled(true);
+            await nftTokenContract.purchase(100, { value: price.mul(100) });
+            await nftTokenContract.purchase(49, { value: price.mul(49) });
             await expect(
                 nftTokenContract.mintReserve(2, accounts[0].address)
             ).to.be.revertedWith("MaxSupplyExceeded()");
@@ -193,7 +202,7 @@ describe.only("Chaos Packs", function () {
     describe("Pack opening", function () {
         this.beforeEach(async function () {
             await nftTokenContract.setSongContract(accounts[0].address);
-            await nftTokenContract.setSaleEnabled(true)
+            await nftTokenContract.setSaleEnabled(true);
         });
         it("Allows song contract to burn NFTs", async function () {
             await nftTokenContract.mintReserve(5, accounts[0].address);
@@ -206,11 +215,12 @@ describe.only("Chaos Packs", function () {
         });
         it("Does not allow anyone else to burn", async function () {
             await nftTokenContract.mintReserve(5, accounts[0].address);
-            nftTokenContract = await nftTokenContract.connect(accounts[1])
-            await expect(nftTokenContract.burnPack(0)).to.be.revertedWith("OnlySongContractCanBurn()")
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(nftTokenContract.burnPack(0)).to.be.revertedWith(
+                "OnlySongContractCanBurn()"
+            );
         });
     });
-
 
     describe("Access control", function () {
         it("Allows owner to change owner", async function () {
@@ -302,24 +312,35 @@ describe.only("Chaos Packs", function () {
             ).to.be.revertedWith("Ownable: caller is not the owner");
         });
     });
-    
-    describe("Cooldown",function() {
-        this.beforeAll(async function() {
-            const batchMinterFactory = await ethers.getContractFactory("BatchMinter", accounts[0]) as BatchMinter__factory
-            batchMinter = await batchMinterFactory.deploy()
-        })
-        
-        this.beforeEach(async function() {
-            await nftTokenContract.setSaleEnabled(true)
-        })
-        
-        it("Allows contracts to mint 1 per block", async function() {
-            await batchMinter.batchPurchase(nftTokenContract.address, 1, {value: price})
-            expect (await nftTokenContract.balanceOf(batchMinter.address)).to.equal(1)
-        })
 
-        it("Does not allow contracts to mint multiple times per block", async function() {
-            await expect(batchMinter.batchPurchase(nftTokenContract.address, 2, {value: price.mul(2)})).to.be.revertedWith("OnlyOneCallPerBlockForNonEOA()")
-        })
-    })
+    describe("Cooldown", function () {
+        this.beforeAll(async function () {
+            const batchMinterFactory = (await ethers.getContractFactory(
+                "BatchMinter",
+                accounts[0]
+            )) as BatchMinter__factory;
+            batchMinter = await batchMinterFactory.deploy();
+        });
+
+        this.beforeEach(async function () {
+            await nftTokenContract.setSaleEnabled(true);
+        });
+
+        it("Allows contracts to mint 1 per block", async function () {
+            await batchMinter.batchPurchase(nftTokenContract.address, 1, {
+                value: price,
+            });
+            expect(
+                await nftTokenContract.balanceOf(batchMinter.address)
+            ).to.equal(1);
+        });
+
+        it("Does not allow contracts to mint multiple times per block", async function () {
+            await expect(
+                batchMinter.batchPurchase(nftTokenContract.address, 2, {
+                    value: price.mul(2),
+                })
+            ).to.be.revertedWith("OnlyOneCallPerBlockForNonEOA()");
+        });
+    });
 });

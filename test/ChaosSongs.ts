@@ -11,6 +11,8 @@ import {
     SplitMain__factory,
     MockChaosPacks,
     MockChaosPacks__factory,
+    AnyERC20__factory,
+    AnyERC20,
 } from "../typechain";
 import { BaseProvider } from "@ethersproject/providers";
 
@@ -25,16 +27,18 @@ const config = {
 
 let thousandAddresses = addresses;
 
-describe("Chaos Songs", function () {
+describe.only("Chaos Songs", function () {
     let provider: BaseProvider;
     let accounts: SignerWithAddress[];
     let nftTokenContract: ChaosSongs;
     let splitContract: SplitMain;
     let packContract: MockChaosPacks;
+    let anyERC20: AnyERC20;
 
     let nftTokenFactory: ChaosSongs__factory;
     let splitFactory: SplitMain__factory;
     let packFactory: MockChaosPacks__factory;
+    let anyERC20Factory: AnyERC20__factory;
 
     this.beforeAll(async function () {
         accounts = await ethers.getSigners();
@@ -53,6 +57,11 @@ describe("Chaos Songs", function () {
             "MockChaosPacks",
             accounts[0]
         )) as MockChaosPacks__factory;
+
+        anyERC20Factory = (await ethers.getContractFactory(
+            "AnyERC20",
+            accounts[0]
+        )) as AnyERC20__factory;
     });
 
     beforeEach(async function () {
@@ -88,9 +97,7 @@ describe("Chaos Songs", function () {
             nftTokenContract = nftTokenContract.connect(accounts[1]);
         });
         it("Does not allow opening by non owner of pack", async function () {
-            nftTokenContract = await nftTokenContract.connect(
-                accounts[2]
-            );
+            nftTokenContract = await nftTokenContract.connect(accounts[2]);
             await expect(nftTokenContract.openPack(1)).to.be.revertedWith(
                 "CallerIsNotTokenOwner()"
             );
@@ -401,7 +408,10 @@ describe("Chaos Songs", function () {
     });
 
     describe("Liquid splits", function () {
-        it("Should allow liquid splits distributions in expected case", async function () {
+        this.beforeEach(async function () {
+            anyERC20 = await anyERC20Factory.deploy();
+        });
+        it("Should allow liquid splits eth distributions in expected case", async function () {
             const onehundredaddresses = thousandAddresses.slice(-100);
             for (let index = 0; index < onehundredaddresses.length; index++) {
                 await nftTokenContract.mintSupercharged(
@@ -413,10 +423,52 @@ describe("Chaos Songs", function () {
                 to: nftTokenContract.address,
                 value: ethers.utils.parseEther("10"),
             });
+            const balanceBefore = await provider.getBalance(
+                nftTokenContract.address
+            );
             await nftTokenContract.distributeETH(
                 onehundredaddresses,
                 accounts[0].address
             );
+            const balanceAfter = await provider.getBalance(
+                nftTokenContract.address
+            );
+
+            expect(
+                balanceBefore
+                    .sub(balanceAfter)
+                    .eq(ethers.utils.parseEther("10"))
+            ).to.be.true;
+        });
+
+        it("Should allow liquid splits erc20 distributions in expected case", async function () {
+            await anyERC20.mint(
+                nftTokenContract.address,
+                ethers.utils.parseEther("15")
+            );
+            const onehundredaddresses = thousandAddresses.slice(-100);
+            for (let index = 0; index < onehundredaddresses.length; index++) {
+                await nftTokenContract.mintSupercharged(
+                    onehundredaddresses[index],
+                    10
+                );
+            }
+            const balanceBefore = await anyERC20.balanceOf(
+                nftTokenContract.address
+            );
+            await nftTokenContract.distributeERC20(
+                onehundredaddresses,
+                anyERC20.address,
+                accounts[0].address
+            );
+            const balanceAfter = await anyERC20.balanceOf(
+                nftTokenContract.address
+            );
+            expect(
+                balanceBefore
+                    .sub(balanceAfter)
+                    .eq(ethers.utils.parseEther("15"))
+            ).to.be.true;
         });
     });
 

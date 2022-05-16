@@ -58,6 +58,7 @@ contract ChaosSongs is
     /// @param _contractURI URI for marketplace contract metadata
     /// @param _splitMain Address of splits contract for sending royalties
     /// @param _distributorFee Optional fee to compensate address calling distribute, offset gas
+    /// @param _royaltyPoints BP of royalties to send to song contract
     constructor(
         string memory baseURI_,
         string memory _contractURI,
