@@ -176,6 +176,26 @@ describe.only("Chaos Packs", function () {
             ).to.be.revertedWith("Ownable: caller is not the owner");
         });
 
+        it("Should allow the owner to batch mint reserve", async function () {
+            await nftTokenContract.batchMintReserve(
+                [accounts[0].address, accounts[1].address],
+                [1, 2]
+            );
+            expect(
+                await nftTokenContract.balanceOf(accounts[0].address)
+            ).to.equal(1);
+            expect(
+                await nftTokenContract.balanceOf(accounts[1].address)
+            ).to.equal(2);
+        });
+
+        it("Does not allow anyone else to batch mint reserve", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.batchMintReserve([accounts[1].address], [1])
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
         it("Should allow owner to mint up to reserve cap", async function () {
             await nftTokenContract.mintReserve(10, accounts[0].address);
             expect(
@@ -187,6 +207,30 @@ describe.only("Chaos Packs", function () {
             await expect(
                 nftTokenContract.mintReserve(11, accounts[0].address)
             ).to.be.revertedWith("MaxReserveExceeded()");
+        });
+
+        it("Should not allow owner to batch mint more than reserve cap", async function () {
+            await expect(
+                nftTokenContract.batchMintReserve([accounts[0].address], [11])
+            ).to.be.revertedWith("MaxReserveExceeded()");
+            await expect(
+                nftTokenContract.batchMintReserve(
+                    [accounts[0].address, accounts[1].address],
+                    [5, 6]
+                )
+            ).to.be.revertedWith("MaxReserveExceeded()");
+        });
+
+        it("Should not allow owner to batch mint with mismatched arrays", async function () {
+            await expect(
+                nftTokenContract.batchMintReserve(
+                    [accounts[0].address, accounts[1].address],
+                    [9]
+                )
+            ).to.be.revertedWith("LengthMismatch()");
+            await expect(
+                nftTokenContract.batchMintReserve([accounts[0].address], [1, 2])
+            ).to.be.revertedWith("LengthMismatch()");
         });
 
         it("Should not allow owner to mint more than total supply", async function () {
@@ -287,6 +331,33 @@ describe.only("Chaos Packs", function () {
             );
         });
 
+        it("Allows owner to lock song contract", async function () {
+            expect(await nftTokenContract.songContract()).to.equal(
+                config.songAddress
+            );
+            await nftTokenContract.lockSongContract();
+            await expect(
+                nftTokenContract.setSongContract(accounts[2].address)
+            ).to.be.revertedWith("SongContractLocked()");
+        });
+
+        it("Does not allow lock to be called if already locked", async function () {
+            expect(await nftTokenContract.songContract()).to.equal(
+                config.songAddress
+            );
+            await nftTokenContract.lockSongContract();
+            await expect(
+                nftTokenContract.lockSongContract()
+            ).to.be.revertedWith("SongContractLocked()");
+        });
+
+        it("Does not allow anyone else to lock pack contract", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.lockSongContract()
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
         it("Does not allow anyone else to change song contract", async function () {
             nftTokenContract = await nftTokenContract.connect(accounts[1]);
             await expect(
@@ -309,6 +380,19 @@ describe.only("Chaos Packs", function () {
             nftTokenContract = await nftTokenContract.connect(accounts[1]);
             await expect(
                 nftTokenContract.setSink(config.songAddress)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
+        it("Allows owner to set royalty points", async function () {
+            expect(await nftTokenContract.royaltyPoints()).to.equal(1000);
+            await nftTokenContract.setRoyaltyPoints(100);
+            expect(await nftTokenContract.royaltyPoints()).to.equal(100);
+        });
+
+        it("Does not allow anyone else to set royalty points", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(
+                nftTokenContract.setRoyaltyPoints(100)
             ).to.be.revertedWith("Ownable: caller is not the owner");
         });
     });

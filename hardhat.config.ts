@@ -6,7 +6,7 @@ import "@nomiclabs/hardhat-ethers";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-solhint";
 import "@typechain/hardhat";
-import "hardhat-gas-reporter"
+import "hardhat-gas-reporter";
 import "dotenv/config";
 import "hardhat-deploy";
 import "solidity-coverage";
@@ -17,10 +17,13 @@ import "./tasks/block-number";
 import "./tasks/create-collectibles";
 import "./tasks/generate-dna";
 import "./tasks/generate-images";
+import "./tasks/generate-hidden";
 import "./tasks/generate-images-parallel";
 import "./tasks/printdna";
-import "./tasks/parseCsv"
-import "./tasks/swapBaseUri"
+import "./tasks/parseCsv";
+import "./tasks/writeTraitsToCsv";
+import "./tasks/swapBaseUri";
+import "./tasks/generate-metadata";
 
 const MAINNET_RPC_URL =
     process.env.MAINNET_RPC_URL ||
@@ -33,7 +36,9 @@ const KOVAN_RPC_URL =
     process.env.KOVAN_RPC_URL ||
     "https://eth-kovan.alchemyapi.io/v2/your-api-key";
 const MNEMONIC = process.env.MNEMONIC || "your mnemonic";
-const ROPSTEN_RPC_URL = process.env.ROPSTEN_RPC_URL || 'https://eth-ropsten.alchemyapi.io/v2/your-api-key'
+const ROPSTEN_RPC_URL =
+    process.env.ROPSTEN_RPC_URL ||
+    "https://eth-ropsten.alchemyapi.io/v2/your-api-key";
 const ETHERSCAN_API_KEY =
     process.env.ETHERSCAN_API_KEY || "Your etherscan API key";
 // optional
@@ -96,6 +101,12 @@ module.exports = {
         compilers: [
             {
                 version: "0.8.4",
+                settings: {
+                    optimizer: {
+                        enabled: true,
+                        runs: 200,
+                    },
+                },
             },
         ],
     },

@@ -13,12 +13,15 @@ import {
 } from "../typechain";
 
 const config = {
-    baseUri: "https://placeholder.com/{}.json",
-    contractUri: "https://placeholder.com/contract.json",
+    packBaseUri: "ipfs://bafybeidsyei2e73aabn233wbbzxbpvusid2bl3z7lgkoazvhmpncpaexdm/",
+    songBaseUri: "ipfs://bafybeielqdrobwou4elkevni4ja4tcepmbidc7oddst77ka7ebngcrrvou/",
+    songContractUri: "ipfs://QmV2BEKnud4waoQgknzBWvFmwCqEKc5vu2Efh1WbGpfNSL",
+    packContractUri: "ipfs://Qmb8UYuw3ufDhyYr1ERq86afR2TSmfYCvgZVeHQuawoH6t",
     supercharged: 1000,
     distributorFee: 0,
     recipient: "0xd1ed25240ecfa47fD2d46D34584c91935c89546c",
-    royalties: 1000,
+    royalties: 750,
+    ropstenSplit: "0x2ed6c4B5dA6378c7897AC67Ba9e43102Feb694EE"
 };
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
@@ -53,23 +56,24 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     console.log(await accounts[0].getAddress());
 
         packContract = await packFactory.deploy(
-            config.baseUri,
-            config.contractUri,
+            config.packBaseUri,
+            config.packContractUri,
+            230,
             5000,
-            5000,
+            config.royalties,
             accounts[0].address
         );
         
         console.log({packContract})
 
-        splitContract = await splitFactory.deploy();
+        // splitContract = await splitFactory.deploy();
         
-        await splitContract.deployed()
+        // await splitContract.deployed()
 
         chaosSongs = await nftTokenFactory.deploy(
-            config.baseUri,
-            config.contractUri,
-            splitContract.address,
+            config.songBaseUri,
+            config.songContractUri,
+            config.ropstenSplit,
             config.royalties,
             config.distributorFee
         );
@@ -81,22 +85,22 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
         const tx2 = await packContract.setSongContract(chaosSongs.address);
         await tx2.wait()
 
-        const tx3 = await chaosSongs.mintSupercharged(
-            accounts[0].address,
-            config.supercharged
-        );
+        // const tx3 = await chaosSongs.mintSupercharged(
+        //     accounts[0].address,
+        //     config.supercharged
+        // );
         
-        await tx3.wait()
-        const tx4 = await chaosSongs.setSuperchargedOffset();
+        // await tx3.wait()
+        // const tx4 = await chaosSongs.setSuperchargedOffset();
         
-        await tx4.wait()
+        // await tx4.wait()
         
-        const tx5 = await packContract.setSaleEnabled(true)
-        await tx5.wait()
+        // const tx5 = await packContract.setSaleEnabled(true)
+        // await tx5.wait()
         
         console.log({
             packContract: packContract.address,
-            splitContract: splitContract.address,
+            // splitContract: splitContract.address,
             chaosSongs: chaosSongs.address
         })
 

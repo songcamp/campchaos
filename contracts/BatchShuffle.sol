@@ -1,37 +1,37 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "hardhat/console.sol";
-
-/// @title Offsets
-/// @notice
-/// @dev
+/// @title BatchShuffle
+/// @notice Assign random offsets based on seed input. Remove selected offset from set so it cannot be used multiple times
 abstract contract BatchShuffle {
-    uint256 internal immutable _batchSize;
-    uint256 internal immutable _startShuffledId;
+    uint256 internal immutable _batchSize; /*Number of consecutive tokens using the same offset*/
+    uint256 internal immutable _startShuffledId; /*Offset to add to all token IDs*/
 
-    mapping(uint256 => uint16) public availableIds;
-    uint16 public availableCount;
-    mapping(uint256 => uint256) public offsets;
+    mapping(uint256 => uint16) public availableIds; /*Mapping to use to track used offsets*/
+    uint16 public availableCount; /*Track the available count to know the id of the current max offset*/
+    mapping(uint256 => uint256) public offsets; /*Store offsets once found*/
 
-    /// @notice Constructor sets contract metadata configurations and split interfaces
+    /// @notice Constructor sets the shuffle parameters
+    /// @param _availableCount Max number of offsets
+    /// @param batchSize_ Number of consecutive tokens using the same offset
+    /// @param startShuffledId_ Offset to add to all token IDs
     constructor(
         uint16 _availableCount,
         uint256 batchSize_,
         uint256 startShuffledId_
     ) {
-        availableCount = _availableCount;
-        _batchSize = batchSize_;
-        _startShuffledId = startShuffledId_;
+        availableCount = _availableCount; /*Set max offsets*/
+        _batchSize = batchSize_; /*Set consecutive tokens using same offset*/
+        _startShuffledId = startShuffledId_; /*Set offset for all token IDs*/
     }
 
+    /// @notice Set offset at index using seed
+    /// @param _index Offset to set
+    /// @param _seed Number fr RNG
     function _setNextOffset(uint256 _index, uint256 _seed) internal {
-        require(availableCount > 0, "Sold out");
-        // This updates the entropy base for minting. Fairly simple but should work for this use case.
-        // uint256 _seed = uint256(blockhash(block.number - 1)); /*Use prev block hash for pseudo randomness*/
+        require(availableCount > 0, "Sold out"); /*Revert once we use up all indices*/
         // Get index of ID to mint from available ids
         uint256 swapIndex = _seed % availableCount;
-        // console.log(swapIndex);
         // Load in new id
         uint256 newId = availableIds[swapIndex];
         // If unset, assume equals index
@@ -58,7 +58,7 @@ abstract contract BatchShuffle {
         view
         returns (uint256)
     {
-        uint256 _batchIndex = _tokenId % _batchSize;
+        uint256 _batchIndex = _tokenId % _batchSize; /*Get the offset within the batch*/
         uint256 _batchStart = _tokenId - _batchIndex; /*Offsets are stored for batches of 4 consecutive songs*/
         uint256 _offset = offsets[_batchStart];
         uint256 _shuffledTokenId = (_offset * _batchSize) +

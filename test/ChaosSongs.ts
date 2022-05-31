@@ -112,6 +112,16 @@ describe.only("Chaos Songs", function () {
             ).to.equal(4);
         });
 
+        it("Should mint 4x packs on batch opening", async function () {
+            expect(
+                await nftTokenContract.balanceOf(accounts[1].address)
+            ).to.equal(0);
+            await nftTokenContract.batchOpenPack([1, 2, 3, 4]);
+            expect(
+                await nftTokenContract.balanceOf(accounts[1].address)
+            ).to.equal(16);
+        });
+
         it("Returns concatenated token URI", async function () {
             await nftTokenContract.openPack(1);
             const shuffledId = await nftTokenContract.getSongTokenId(1001);
@@ -519,7 +529,7 @@ describe.only("Chaos Songs", function () {
             await nftTokenContract.setRoyaltyPoints(100);
             expect(await nftTokenContract.royaltyPoints()).to.equal(100);
         });
-        it("Does not allow anyone else to set royalty poinst", async function () {
+        it("Does not allow anyone else to set royalty points", async function () {
             nftTokenContract = await nftTokenContract.connect(accounts[1]);
             await expect(
                 nftTokenContract.setRoyaltyPoints(100)
@@ -539,6 +549,30 @@ describe.only("Chaos Songs", function () {
             await expect(
                 nftTokenContract.setPackContract(accounts[2].address)
             ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+        it("Allows owner to lock pack contract", async function () {
+            expect(await nftTokenContract.packContract()).to.equal(
+                packContract.address
+            );
+            await nftTokenContract.lockPackAddress();
+            await expect(
+                nftTokenContract.setPackContract(accounts[2].address)
+            ).to.be.revertedWith("PackContractLocked()");
+        });
+        it("Does not allow locking if already locked", async function () {
+            expect(await nftTokenContract.packContract()).to.equal(
+                packContract.address
+            );
+            await nftTokenContract.lockPackAddress();
+            await expect(
+                nftTokenContract.lockPackAddress()
+            ).to.be.revertedWith("PackContractLocked()");
+        });
+        it("Does not allow anyone else to lock pack contract", async function () {
+            nftTokenContract = await nftTokenContract.connect(accounts[1]);
+            await expect(nftTokenContract.lockPackAddress()).to.be.revertedWith(
+                "Ownable: caller is not the owner"
+            );
         });
         it("Fails to return song ID if token ID does not exist", async function () {
             await expect(
@@ -585,13 +619,6 @@ describe.only("Chaos Songs", function () {
             await expect(
                 nftTokenContract.setContractURI("new")
             ).to.be.revertedWith("Ownable: caller is not the owner");
-        });
-        it("Does not allow anyone owner to set base URI after supercharged offset is set", async function () {
-            await nftTokenContract.mintSupercharged(accounts[1].address, 1000);
-            await nftTokenContract.setSuperchargedOffset();
-            await expect(nftTokenContract.setBaseURI("new")).to.be.revertedWith(
-                "SuperchargedOffsetAlreadySet()"
-            );
         });
         it("Uses new base URI in token URI", async function () {
             expect(await nftTokenContract.baseURI()).to.equal(config.baseUri);

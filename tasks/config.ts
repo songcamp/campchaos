@@ -22,8 +22,8 @@ export const width = 1000;
 export const height = 1000;
 
 export const waveBase =
-    "ipfs://QmUxorMkz1LjGaxgeBLun4te7sY6tDYzTEf5upcKBTLQ86/";
-export const mp3Base = "ipfs://QmbFN3xA1rqyeZKrZwuyvHWJzNxA2Aht2bgYeNo1QyMtHv/";
+    "ipfs://QmYRTuAA61E2kM9izfS13qk8JXTeKPYDWXvtHqqTykwQ7F/";
+export const mp3Base = "ipfs://QmUbtVMriquE1RAL2rdNnA8Yd5GKfZamnPN9zbn8uCbivD/";
 
 /* 
 METADATA NAMES
@@ -38,41 +38,51 @@ export const paperNames = ["Off White", "Stone", "Duck Egg", "Solid White"];
 
 export const backgroundNames = [
     "None",
-    "Chaos 1",
-    "Chaos 2",
-    "Chaos 3",
-    "Painting 1",
-    "Painting 2",
-    "Painting 3",
+    "Electric Wash",
+    "Eau du Nil",
+    "Root Chaos",
+    "Cai",
+    "Paloma",
+    "Cronenberg",
 ];
 
 export const superchargedBackgroundNames = [
-    "Supercharged 1",
-    "Supercharged 2",
-    "Supercharged 3",
-    "Supercharged 4",
-    "Supercharged 5",
+    "Jolly Wrancher",
+    "Fresa Xerox",
+    "Maple Syrup",
+    "Purp Blast",
+    "Folded Mint",
 ];
 
-export const formatNames = ["Vinyl", "8track", "Casette"];
+export const formatNames = ["Vinyl", "8track", "Cassette"];
 
 export const formatColorNames = [
-    "Black",
-    "Green",
-    "Orange",
-    "Pink",
-    "Red",
-    "White",
-    "Black", // Alchemy
-    "White", // Alchemy
+    "Dark",
+    "Sacramento",
+    "Clay",
+    "Plum Jam",
+    "Port",
+    "Light",
+    "Dark", // Alchemy
+    "Light", // Alchemy
 ];
 
 export const coverNames = [
-    "Cover Art Color 1",
-    "Cover Art Color 2",
-    "Cover Art Color 3",
-    "Cover Art Color 4",
-    "Cover Art Color 5",
+    "Gilded",
+    "Marbled",
+    "Drupe",
+    "Pome",
+    "Original",
+    "Alchemy", // only accessible by override
+];
+
+export const superchargedCoverNames = [
+    "Jolly Wrancher",
+    "Fresa Xerox",
+    "Maple Syrup",
+    "Purp Blast",
+    "Folded Mint",
+    "Alchemy"
 ];
 
 export const ribbonNames = [
@@ -93,37 +103,44 @@ export const ribbonColorNames = [
 ];
 
 export const logoNames = [
-    "Logo 1",
-    "Logo 2",
-    "Logo 3",
-    "Logo 4",
-    "Logo 5",
-    "Logo 6",
-    "Logo 7",
-    "Logo 8",
-    "Logo 9",
+    "Arch Serif",
+    "Solar Serif",
+    "Grid Sans",
+    "Solar Roswell",
+    "Chaos",
+    "Chaos Serif",
+    "Solar Sans",
+    "Beacon Sans",
+    "Arch Roswell",
 ];
 
-export const logoColorNames = ["Black", "Green", "Orange", "Pink", "White"];
+export const logoColorNames = [
+    "Dark",
+    "Sacramento",
+    "Clay",
+    "Plum Jam",
+    "Port",
+    "Light",
+];
 
 export const actNames = ["I", "II", "III"];
 
 export const sceneNames = [
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "6",
-    "7",
-    "8",
-    "9",
-    "10",
-    "11",
-    "12",
-    "Alchemy 1",
-    "Alchemy 2",
-    "Alchemy 3",
+    "I",
+    "II",
+    "III",
+    "IV",
+    "V",
+    "VI",
+    "VII",
+    "VIII",
+    "IX",
+    "X",
+    "XI",
+    "XII",
+    "Alchemy I",
+    "Alchemy II",
+    "Alchemy III",
 ];
 
 const actPathNames = ["acti", "actii", "actiii"];
@@ -179,6 +196,7 @@ const isPainting = (dna: number[]): boolean => [4, 5, 6].indexOf(dna[3]) > -1;
 export function applyOverrides(dna: number[], supercharged: boolean): number[] {
     if (isAlchemy(dna)) {
         dna[5] = 6; // Set text color to alchemy black
+        dna[6] = 5; // Set cover art to alchemy
     }
 
     if (isPainting(dna)) {
@@ -221,20 +239,27 @@ export function dnaToPathParams(dna: number[]): pathParams {
     return params;
 }
 
-export function dnaToAttributeNames(dna: number[]): { [key: string]: any } {
+export function dnaToAttributeNames(
+    dna: number[],
+    supercharged: boolean
+): { [key: string]: any } {
     const params = {
         Act: actNames[dna[0]],
         Scene: sceneNames[dna[1]],
         Paper: paperNames[dna[2]],
-        Background: backgroundNames[dna[3]],
-        Format: formatNames[dna[4]],
-        "Format Color": formatColorNames[dna[5]],
-        "Cover Art Color": coverNames[dna[6]],
-        Logo: logoNames[dna[7]] + " - " + logoColorNames[dna[8]],
-        Ribbon:
-            ribbonNames[dna[9]] === "None"
-                ? "None"
-                : ribbonNames[dna[9]] + " - " + ribbonColorNames[dna[10]],
+        Background: supercharged
+            ? superchargedBackgroundNames[dna[3]]
+            : backgroundNames[dna[3]],
+        Layout: formatNames[dna[4]],
+        "Layout Color": formatColorNames[dna[5]],
+        "Cover Art Color": supercharged
+            ? superchargedCoverNames[dna[6]]
+            : coverNames[dna[6]],
+        Logo: logoNames[dna[7]],
+        "Logo Color": logoColorNames[dna[9]],
+        Ribbon: ribbonNames[dna[8]],
+        "Ribbon Color":
+            ribbonNames[dna[8]] === "None" ? "None" : ribbonColorNames[dna[10]],
     };
     return params;
 }
@@ -249,7 +274,9 @@ export const bgPath = (params: pathParams) =>
         ? `backgrounds (painting, chaos)/chaos_${params.act}_${params.format}_background-${params.bg}.png`
         : `None`;
 export const superchargedBgPath = (params: pathParams) =>
-    `backgrounds supercharged/supercharged_${params.act}_${params.format}_background-${params.superchargedBg}.png`;
+    params.isAlchemy
+        ? `backgrounds supercharged/backgrounds_alchemy_supercharged-${params.superchargedBg}.png`
+        : `backgrounds supercharged/supercharged_${params.act}_${params.format}_background-${params.superchargedBg}.png`;
 export const formatPath = (params: pathParams) =>
     params.isAlchemy
         ? params.isPainting
@@ -259,21 +286,29 @@ export const formatPath = (params: pathParams) =>
         ? `formats supercharged/supercharged_${params.act}_${params.format}_scene-${params.scene}.png`
         : `formats regular/${params.act}_${params.format}_scene-${params.scene}_color-${params.formatColor}.png`;
 export const superchargedFormatPath = (params: pathParams) =>
-    `formats supercharged/supercharged_${params.act}_${params.format}_scene-${params.scene}.png`;
+    params.isAlchemy
+        ? `formats alechmy/alchemy_${params.act}_${params.format}_light-${params.scene}.png`
+        : `formats supercharged/supercharged_${params.act}_${params.format}_scene-${params.scene}.png`;
 export const coverPath = (params: pathParams) =>
     params.isAlchemy
         ? `cover art alchemy/alchemy_${params.act}_${params.format}-${params.scene}.png`
         : `cover art regular/${params.act}_${params.format}_scene-${params.scene}_color-${params.coverColor}.png`;
 export const superchargedCoverPath = (params: pathParams) =>
-    `cover art supercharged/supercharged_${params.act}_${params.format}_scene_${params.scene}_color-${params.coverColor}.png`;
+    params.isAlchemy
+        ? `cover art alchemy/alchemy_${params.act}_${params.format}-${params.scene}.png`
+        : `cover art supercharged/supercharged_${params.act}_${params.format}_scene_${params.scene}_color-${params.coverColor}.png`;
 export const logoPath = (params: pathParams) =>
     params.isAlchemy
-        ? `logos/alchemy_${params.act}_${params.format}_logo_${params.logo}.png`
+        ? params.isPainting
+            ? `Logos Full/alchemy_${params.act}_${params.format}_logo_light_${params.logo}.png`
+            : `Logos Full/alchemy_${params.act}_${params.format}_logo_dark_${params.logo}.png`
         : params.isPainting
         ? `logos supercharged/supercharged_${params.act}_${params.format}_logo-${params.logo}.png`
         : `logos/${params.act}_${params.format}_logo-${params.logo}_color-${params.logoColor}.png`;
 export const superchargedLogoPath = (params: pathParams) =>
-    `logos supercharged/supercharged_${params.act}_${params.format}_logo-${params.logo}.png`;
+    params.isAlchemy
+        ? `Logos Full/alchemy_${params.act}_${params.format}_logo_light_${params.logo}.png`
+        : `logos supercharged/supercharged_${params.act}_${params.format}_logo-${params.logo}.png`;
 export const ribbonsPath = (params: pathParams) =>
     params.isAlchemy
         ? `ribbons alchemy/alchemy_${params.act}_${params.format}_ribbon-${params.ribbon}_color-${params.ribbonColor}.png`
@@ -379,6 +414,24 @@ const actTable = [
     { weight: 5000, id: 2 },
 ];
 
+const superchargedSceneTable = [
+    { weight: 1687, id: 0 },
+    { weight: 1687, id: 1 },
+    { weight: 1687, id: 2 },
+    { weight: 1687, id: 3 },
+    { weight: 1687, id: 4 },
+    { weight: 1687, id: 5 },
+    { weight: 1687, id: 6 },
+    { weight: 1687, id: 7 },
+    { weight: 1687, id: 8 },
+    { weight: 1687, id: 9 },
+    { weight: 1687, id: 10 },
+    { weight: 1687, id: 11 },
+    { weight: 250, id: 12 },
+    { weight: 250, id: 13 },
+    { weight: 250, id: 14 },
+];
+
 const sceneTable = [
     { weight: 1687, id: 0 },
     { weight: 1687, id: 1 },
@@ -397,6 +450,13 @@ const sceneTable = [
     { weight: 250, id: 14 },
 ];
 
+export const hiddenFolder = 'Hidden Songs 1 of 1s/'
+
+export const hiddenImages = [
+    'hidden_scene_I.png',
+    'hidden_scene_II.png',
+    'hidden_scene_III.png',
+]
 export const rarityTables = [
     actTable,
     sceneTable,
@@ -413,7 +473,7 @@ export const rarityTables = [
 
 export const superchargedRarityTables = [
     actTable,
-    sceneTable,
+    superchargedSceneTable,
     paperTable,
     superchargedBackgroundTable,
     formatTable,

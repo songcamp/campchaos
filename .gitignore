@@ -123,3 +123,7 @@ node_modules
 
 input/
 output*
+generated*
+images*
+demo*
+metadata*

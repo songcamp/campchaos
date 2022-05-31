@@ -19,12 +19,12 @@ task("parsecsv", "Parse song CSV")
                 .on("error", (error: any) => console.error(error))
                 .on("data", (row: { [key: string]: string }) => {
                     // console.log({row, act: row.ActID, scene: row.SceneId})
-                    if (dataMap[row["ActID"]]) {
+                    if (dataMap[row["ActId"]]) {
                         console.log(`Setting existing ${row}`);
-                        dataMap[row["ActID"]][row["SceneId"]] = row;
+                        dataMap[row["ActId"]][row["SceneId"]] = row;
                     } else {
                         console.log(`Setting new ${row}`);
-                        dataMap[row["ActID"]] = {
+                        dataMap[row["ActId"]] = {
                             [row["SceneId"]]: row,
                         };
                     }
@@ -35,9 +35,8 @@ task("parsecsv", "Parse song CSV")
                 });
         });
 
-        const a = await myPromise;
+        await myPromise;
         console.log({ dataMap });
-        console.log({ a });
         saveMetadata(taskArgs.output, dataMap);
     });
 

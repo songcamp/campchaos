@@ -16,8 +16,8 @@ error SuperchargedOffsetAlreadySet();
 error SuperchargeConfigurationNotReady();
 error SuperchargedOffsetNotSet();
 error InvalidOffset();
-error LengthMismatch();
 error BurnPackFailed();
+error PackContractLocked();
 
 /// @title Chaos Songs
 /// @notice Distribute random selection of 4 songs to Chaos Pack holders
@@ -40,6 +40,7 @@ contract ChaosSongs is
     uint256 public superchargedOffset; /*Track offset for first 1000 NFTs separately*/
 
     ChaosPacks public packContract; /*External contract to use for pack NFTs*/
+    bool public packContractLocked; /*Allow pack contract to be locked against further change*/
 
     /*Liquid splits config*/
     address payable public immutable payoutSplit; /* 0xSplits address for split */
@@ -66,17 +67,16 @@ contract ChaosSongs is
         uint256 _royaltyPoints,
         uint32 _distributorFee
     )
-        ERC721A("Chaos Songs", "SONGS")
+        ERC721A("Chaos", "\u0024SONGS")
         BatchShuffle(PACK_SUPPLY, SONG_COUNT, SUPERCHARGED_SUPPLY)
     {
-        _setBaseURI(baseURI_); /*Set token level metadata*/
+        baseURI = baseURI_; /*Set token level metadata*/
         contractURI = _contractURI; /*Set marketplace metadata*/
 
         splitMain = ISplitMain(_splitMain); /*Establish interface to splits contract*/
 
         // create dummy mutable split with this contract as controller;
         // recipients & distributorFee will be updated on first payout
-        // might be easier to pass this in as calldata in constructor?
         address[] memory recipients = new address[](2);
         recipients[0] = address(0);
         recipients[1] = address(1);
@@ -99,16 +99,29 @@ contract ChaosSongs is
     /*****************
     EXTERNAL MINTING FUNCTIONS
     *****************/
+    /// @dev Burn packs and receive 4 song NFTs in exchange
+    /// @param _packIds Packs owned by sender
+    function batchOpenPack(uint256[] calldata _packIds) external {
+        for (uint256 index = 0; index < _packIds.length; index++) {
+            _openPack(_packIds[index]);
+        }
+    }
 
     /// @dev Burn a pack and receive 4 song NFTs in exchange
     /// @param _packId Pack owned by sender
     function openPack(uint256 _packId) external {
+        _openPack(_packId);
+    }
+
+    /// @dev Burn a pack and receive 4 song NFTs in exchange
+    /// @param _packId Pack owned by sender
+    function _openPack(uint256 _packId) internal {
         if (packContract.ownerOf(_packId) != msg.sender)
             /*Only pack owner can open pack*/
             revert CallerIsNotTokenOwner();
 
         if (superchargedOffset == 0)
-            /*Pack opening disabled until supercharged tokensa are configured*/
+            /*Pack opening disabled until supercharged tokens are configured*/
             revert PacksDisabledUntilSuperchargedComplete();
 
         if (!packContract.burnPack(_packId)) revert BurnPackFailed(); /*Opening a pack burns the pack NT*/
@@ -124,7 +137,6 @@ contract ChaosSongs is
     /// @dev Mint the supercharged tokens to proper destination
     /// @param _to Recipient
     /// @param _amount Number of tokens to send
-    // TODO distribute via a different contract?
     function mintSupercharged(address _to, uint256 _amount) external onlyOwner {
         _mintSupercharged(_to, _amount);
     }
@@ -140,21 +152,6 @@ contract ChaosSongs is
         for (uint256 index = 0; index < _tos.length; index++) {
             _mintSupercharged(_tos[index], _amounts[index]);
         }
-    }
-
-    /// @notice Called with the sale price to determine how much royalty
-    //          is owed and to whom.
-    /// @param _tokenId - the NFT asset queried for royalty information
-    /// @param _value - the sale price of the NFT asset specified by _tokenId
-    /// @return _receiver - address of who should be sent the royalty payment
-    /// @return _royaltyAmount - the royalty payment amount for value sale price
-    function royaltyInfo(uint256 _tokenId, uint256 _value)
-        external
-        view
-        override(IERC2981Royalties)
-        returns (address _receiver, uint256 _royaltyAmount)
-    {
-        return (address(this), (_value * royaltyPoints) / 10000);
     }
 
     /*****************
@@ -253,6 +250,7 @@ contract ChaosSongs is
 
     /// @notice distributes ERC20s to supercharged NFT holders
     /// @param accounts Ordered, unique list of supercharged NFT tokenholders
+    /// @param token ERC20 token to distribute
     /// @param distributorAddress Address to receive distributorFee
     function distributeERC20(
         address[] calldata accounts,
@@ -287,14 +285,24 @@ contract ChaosSongs is
     CONFIG FUNCTIONS
     *****************/
 
-    // TODO lock pack contract address?
+    /// @notice Set the contract with packs to burn upon opening
+    /// @dev reverts if locked
+    /// @param _packContract New contract address
     function setPackContract(address _packContract) external onlyOwner {
+        if (packContractLocked) revert PackContractLocked();
         packContract = ChaosPacks(_packContract);
     }
 
-    /// @notice internal helper to update token URI
+    /// @notice Lock pack contract against further changes
+    function lockPackAddress() external onlyOwner {
+        if (packContractLocked) revert PackContractLocked();
+        packContractLocked = true;
+    }
+
+    /// @notice Set new base URI
+    /// @dev only possible before supercharged offset is set
     /// @param baseURI_ String to prepend to token IDs
-    function _setBaseURI(string memory baseURI_) internal {
+    function setBaseURI(string memory baseURI_) external onlyOwner {
         baseURI = baseURI_;
     }
 
@@ -302,14 +310,6 @@ contract ChaosSongs is
     /// @param _contractURI Contract metadata json
     function setContractURI(string memory _contractURI) external onlyOwner {
         contractURI = _contractURI;
-    }
-
-    /// @notice Set new base URI
-    /// @dev only possible before supercharged offset is set
-    /// @param baseURI_ String to prepend to token IDs
-    function setBaseURI(string memory baseURI_) external onlyOwner {
-        if (superchargedOffset != 0) revert SuperchargedOffsetAlreadySet();
-        _setBaseURI(baseURI_);
     }
 
     /// @notice Set distributorFee as owner
@@ -342,6 +342,21 @@ contract ChaosSongs is
                     abi.encodePacked(baseURI, _shuffled.toString(), ".json")
                 )
                 : "";
+    }
+
+    /// @notice Called with the sale price to determine how much royalty
+    //          is owed and to whom.
+    /// @param _tokenId - the NFT asset queried for royalty information
+    /// @param _value - the sale price of the NFT asset specified by _tokenId
+    /// @return _receiver - address of who should be sent the royalty payment
+    /// @return _royaltyAmount - the royalty payment amount for value sale price
+    function royaltyInfo(uint256 _tokenId, uint256 _value)
+        external
+        view
+        override(IERC2981Royalties)
+        returns (address _receiver, uint256 _royaltyAmount)
+    {
+        return (address(this), (_value * royaltyPoints) / 10000);
     }
 
     /*****************

@@ -14,6 +14,8 @@ error MaxReserveExceeded();
 error MaxPerTxExceeded();
 error InvalidPurchaseValue();
 error OnlySongContractCanBurn();
+error LengthMismatch();
+error SongContractLocked();
 
 /// @title Chaos Packs
 /// @notice Sale contract for Songcamp Chaos Packs
@@ -21,12 +23,13 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
     using SafeTransferLib for address payable;
     using Strings for uint256;
 
-    uint256 constant MAX_PER_MINT = 100; /*Don't let people buy more than 5 per transaction*/
+    uint256 constant MAX_PER_MINT = 100; /*Don't let people buy more than 100 per transaction*/
     uint256 reserved; /*Max amount for reserve*/
     uint256 immutable maxSupply; /*Max token ID - set in constructor*/
     uint256 public constant PRICE = 0.2 ether; /*Public sale price*/
 
     address public songContract; /*Address that can burn packs to open them*/
+    bool public songContractLocked; /*Allow song contract to be locked against further change*/
 
     uint256 public royaltyPoints; /*Royalty percentage / 10000*/
 
@@ -50,7 +53,6 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
         _;
     }
 
-    // TODO royalty points
     /// @notice Constructor sets contract metadata configurations and sale configurations
     /// @param baseURI_ Base URI for token metadata
     /// @param _contractURI URI for marketplace contract metadata
@@ -65,7 +67,7 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
         uint256 _maxSupply,
         uint256 _royaltyPoints,
         address payable _sink
-    ) ERC721A("Chaos Packs", "PACKS") {
+    ) ERC721A("Chaos Packs", "\u0024PACKS") {
         ethSink = _sink; /*Set the ETH destination - should be immutable split*/
         contractURI = _contractURI; /*Set contract metadata*/
         baseURI = baseURI_; /*Set token metadata*/
@@ -81,7 +83,7 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
     *****************/
     /// @notice Mint pack by anyone
     /// @dev Sale state must be enabled
-    /// @param _quantity How many tokens to buy - up to 5 at a time
+    /// @param _quantity How many tokens to buy - up to 100 at a time
     function purchase(uint256 _quantity) external payable oncePerBlock {
         if (!saleEnabled) revert SaleDisabled(); /*Sale must be enabled*/
         if (msg.value != (PRICE * _quantity)) revert InvalidPurchaseValue(); /*Purchase price must be exact*/
@@ -91,14 +93,33 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
         _safeMint(msg.sender, _quantity); /*Mint packs to sender*/
     }
 
-    function withdrawToSink() external onlyOwner {
-        ethSink.safeTransferETH(address(this).balance);
+    /// @notice Mint special reserve by owner
+    /// @param _tos Addresses to mint tokens to
+    /// @param _amounts How many tokens to mint
+    function batchMintReserve(
+        address[] calldata _tos,
+        uint256[] calldata _amounts
+    ) external onlyOwner {
+        if (_tos.length != _amounts.length) revert LengthMismatch();
+        for (uint256 index = 0; index < _tos.length; index++) {
+            _mintReserve(_amounts[index], _tos[index]);
+        }
     }
 
     /// @notice Mint special reserve by owner
     /// @param _to Address to mint tokens to
     /// @param _quantity How many tokens to mint
     function mintReserve(uint256 _quantity, address _to) external onlyOwner {
+        _mintReserve(_quantity, _to);
+    }
+
+    /*****************
+    INTERNAL MINTING FUNCTIONS
+    *****************/
+    /// @notice Mint special reserve by owner
+    /// @param _to Address to mint tokens to
+    /// @param _quantity How many tokens to mint
+    function _mintReserve(uint256 _quantity, address _to) internal {
         if (_quantity > reserved) revert MaxReserveExceeded(); /*Check against max admin mint*/
         if ((totalSupply() + _quantity) > maxSupply)
             /*Check against max supply*/
@@ -118,21 +139,6 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
         return true;
     }
 
-    /// @notice Called with the sale price to determine how much royalty
-    //          is owed and to whom.
-    /// @param _tokenId - the NFT asset queried for royalty information
-    /// @param _value - the sale price of the NFT asset specified by _tokenId
-    /// @return _receiver - address of who should be sent the royalty payment
-    /// @return _royaltyAmount - the royalty payment amount for value sale price
-    function royaltyInfo(uint256 _tokenId, uint256 _value)
-        external
-        view
-        override(IERC2981Royalties)
-        returns (address _receiver, uint256 _royaltyAmount)
-    {
-        return (songContract, (_value * royaltyPoints) / 10000);
-    }
-
     /*****************
     CONFIG FUNCTIONS
     *****************/
@@ -148,11 +154,23 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
         saleEnabled = _enabled;
     }
 
-    // TODO lock song contract address?
+    /// @notice Set royalty percentage
+    /// @param _royaltyPoints Royalty percentage out of 10000
+    function setRoyaltyPoints(uint256 _royaltyPoints) external onlyOwner {
+        royaltyPoints = _royaltyPoints;
+    }
+
     /// @notice Set song contract as owner
     /// @param _songContract Song contract address
     function setSongContract(address _songContract) external onlyOwner {
+        if (songContractLocked) revert SongContractLocked();
         songContract = _songContract;
+    }
+
+    /// @notice Lock song contract against further changes
+    function lockSongContract() external onlyOwner {
+        if (songContractLocked) revert SongContractLocked();
+        songContractLocked = true;
     }
 
     /// @notice Set new base URI
@@ -167,6 +185,17 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
         contractURI = _contractURI;
     }
 
+    /*****************
+    DISTRIBUTION FUNCTIONS
+    *****************/
+    /// @notice Withdraw sale proceeds to sink
+    function withdrawToSink() external onlyOwner {
+        ethSink.safeTransferETH(address(this).balance);
+    }
+
+    /*****************
+    Public view interfaces
+    *****************/
     function tokenURI(uint256 tokenId)
         public
         view
@@ -179,5 +208,20 @@ contract ChaosPacks is ERC721A, Ownable, IERC2981Royalties {
             bytes(baseURI).length > 0
                 ? string(abi.encodePacked(baseURI, tokenId.toString(), ".json"))
                 : "";
+    }
+
+    /// @notice Called with the sale price to determine how much royalty
+    //          is owed and to whom.
+    /// @param _tokenId - the NFT asset queried for royalty information
+    /// @param _value - the sale price of the NFT asset specified by _tokenId
+    /// @return _receiver - address of who should be sent the royalty payment
+    /// @return _royaltyAmount - the royalty payment amount for value sale price
+    function royaltyInfo(uint256 _tokenId, uint256 _value)
+        external
+        view
+        override(IERC2981Royalties)
+        returns (address _receiver, uint256 _royaltyAmount)
+    {
+        return (songContract, (_value * royaltyPoints) / 10000);
     }
 }

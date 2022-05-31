@@ -34,10 +34,12 @@ const isDnaUnique = (_DnaList: number[][], _dna: number[]) => {
 const isSongListUnique = (
     _DnaList: number[][],
     _dna: number[],
-    _index: number
+    _index: number,
+    _start: number
 ) => {
-    const startIndex = _index - (_index % 4);
-    for (let i = startIndex; i < _index; i++) {
+    const startIndex = _index - (_index % 4) - _start;
+    const endIndex = _index - _start
+    for (let i = startIndex; i < endIndex; i++) {
         if (_DnaList[i][0] == _dna[0] && _DnaList[i][1] == _dna[1]) {
             console.log(
                 `found duplicate song ${_dna.join("-")} ${_DnaList[i].join(
@@ -63,20 +65,27 @@ task("generate-dna", "Generates chaos DNA")
 
         console.log();
         console.log("start creating NFTs.");
-
+        
+        const isSupercharged = taskArgs.supercharged === "true"
+        
+        console.log({isSupercharged})
+        
         // clear meta data from previous run
         writeMetaData(taskArgs.output, "");
+        
+        if ((taskArgs.start % 4) !== 0) throw new Error('Invalid start')
+        
 
         let editionCount = taskArgs.start;
         let editionSize = taskArgs.size;
-        const rarity = taskArgs.supercharged ? superchargedRarityTables : rarityTables
+        const rarity = isSupercharged ? superchargedRarityTables : rarityTables
         let allDna: { [key: string]: number[] } = {};
         let dnaList = [];
         while (editionCount < editionSize) {
-            let newDna = createDna(rarity, taskArgs.supercharged);
+            let newDna = createDna(rarity, isSupercharged);
             while (
                 !isDnaUnique(dnaList, newDna) ||
-                !isSongListUnique(dnaList, newDna, editionCount)
+                !isSongListUnique(dnaList, newDna, editionCount, taskArgs.start)
             ) {
                 // recalculate dna as this has been used before.
                 console.log(
@@ -84,7 +93,7 @@ task("generate-dna", "Generates chaos DNA")
                         newDna.join("-") +
                         ", recalculate..."
                 );
-                newDna = createDna(rarityTables, taskArgs.supercharged);
+                newDna = createDna(rarity, isSupercharged);
             }
             allDna[editionCount] = newDna;
             // console.log('- dna: ' + newDna.join('-'))
