@@ -400,9 +400,13 @@ task("generate-images", "Generates chaos images")
                 // draw each layer
                 elementArray.forEach((element) => {
                     if (!metadataOnly) drawElement(element);
-                    attributesList.push(
-                        getAttributeForElement(element, newDna, isSupercharged)
+                    const attribute = getAttributeForElement(
+                        element,
+                        newDna,
+                        isSupercharged
                     );
+                    if (attribute.value !== "None")
+                        attributesList.push(attribute);
                 });
 
                 attributesList.push({

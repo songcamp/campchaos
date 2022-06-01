@@ -15,6 +15,7 @@ import "./tasks/accounts";
 import "./tasks/balance";
 import "./tasks/block-number";
 import "./tasks/create-collectibles";
+import "./tasks/fix-dna";
 import "./tasks/generate-dna";
 import "./tasks/generate-images";
 import "./tasks/generate-hidden";

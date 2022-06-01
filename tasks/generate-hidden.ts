@@ -1,12 +1,9 @@
 import "@nomiclabs/hardhat-web3";
-import { createCanvas, loadImage } from "canvas";
 import { task } from "hardhat/config";
 import fs from "fs";
 
 import {
     baseImageUri,
-    dnaToPathParams,
-    dnaToAttributeNames,
     mp3Base,
     waveBase,
     hiddenFolder,
@@ -54,57 +51,6 @@ type Metadata = {
     }[];
 };
 
-const addLayer = (
-    _name: string,
-    _path: (params: any) => string | null,
-    _names: string[],
-    _traitType: string,
-    _position: { x: number; y: number },
-    _size: { width: number; height: number }
-) => {
-    let elements = [];
-    for (let index = 0; index < _names.length; index++) {
-        const _element = {
-            id: index,
-            name: _names[index],
-            path: null,
-            pathGenerator: _path,
-            traitType: _traitType,
-        };
-        elements.push(_element);
-    }
-
-    let elementsForLayer = {
-        name: _name,
-        position: _position,
-        size: _size,
-        elements,
-    };
-    return elementsForLayer;
-};
-
-const getAttributeForElement = (
-    _element: {
-        layer: ConstructedLayer;
-        loadedImage: any;
-    },
-    _dna: number[],
-    _supercharged: boolean
-): {
-    trait_type: string;
-    value: string;
-} => {
-    let selectedElement = _element.layer.selectedElement;
-    const attributeNames = dnaToAttributeNames(_dna, _supercharged);
-    if (!selectedElement.traitType) {
-        console.log({ selectedElement, attributeNames });
-    }
-    let attribute = {
-        trait_type: selectedElement.traitType || "",
-        value: attributeNames[selectedElement.traitType],
-    };
-    return attribute;
-};
 
 const generateMetadata = (
     _act: number,
@@ -136,50 +82,6 @@ const generateMetadata = (
     return tempMetadata;
 };
 
-const loadLayerImg = async (
-    _layer: ConstructedLayer
-): Promise<{ layer: ConstructedLayer; loadedImage: any }> => {
-    return new Promise(async (resolve) => {
-        // console.log(`Loading ${_layer.selectedElement.path}`);
-        let image;
-        try {
-            image = await loadImage(`${_layer.selectedElement.path}`);
-        } catch (error) {
-            console.log(`Failed to load image ${_layer.selectedElement.path}`);
-        }
-        resolve({ layer: _layer, loadedImage: image });
-    });
-};
-
-const loadEmptyLayer = async (
-    _layer: ConstructedLayer
-): Promise<{ layer: ConstructedLayer; loadedImage: any }> => {
-    return new Promise(async (resolve) => {
-        resolve({ layer: _layer, loadedImage: undefined });
-    });
-};
-
-const constructLayer = (_folder: string, _dna: number[], _layers: Layer[]) => {
-    let mappedDnaToLayers = _layers.map((layer, index) => {
-        let dnaIndex = index;
-        let selectedElement = layer.elements.find(
-            (element) => element.id === _dna[dnaIndex]
-        );
-        if (!selectedElement)
-            console.log({ layer, dnaIndex, dna: _dna[dnaIndex] });
-        const pathParams = dnaToPathParams(_dna);
-        if (selectedElement) {
-            selectedElement.path =
-                _folder + selectedElement.pathGenerator(pathParams);
-        }
-        return {
-            position: layer.position,
-            size: layer.size,
-            selectedElement: { ...selectedElement },
-        };
-    });
-    return mappedDnaToLayers;
-};
 
 const applyAdditionalMetadata = (
     act: number,
@@ -189,7 +91,6 @@ const applyAdditionalMetadata = (
 ): { trait_type: string; value: string }[] => {
     const attributeList = [
         "Song", // keep
-        "House", // keep
         "BPM", // keep
         "Key", // keep
     ];
@@ -232,7 +133,7 @@ task("generate-hidden", "Generates hidden chaos song metadata")
         let metadataList: Metadata[] = [];
         const ids = taskArgs.ids.split(',')
 
-        for (let i = 0; i < ids; i++) {
+        for (let i = 0; i < ids.length; i++) {
             const index = i;
 
             // const id = Math.floor(Math.random() * 19999) + 1000;

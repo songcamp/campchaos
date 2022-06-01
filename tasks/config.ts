@@ -39,7 +39,7 @@ export const paperNames = ["Off White", "Stone", "Duck Egg", "Solid White"];
 export const backgroundNames = [
     "None",
     "Electric Wash",
-    "Eau du Nil",
+    "Eau de Nil",
     "Root Chaos",
     "Cai",
     "Paloma",
@@ -197,6 +197,7 @@ export function applyOverrides(dna: number[], supercharged: boolean): number[] {
     if (isAlchemy(dna)) {
         dna[5] = 6; // Set text color to alchemy black
         dna[6] = 5; // Set cover art to alchemy
+        dna[9] = 0; // Set logo color to dark
     }
 
     if (isPainting(dna)) {
